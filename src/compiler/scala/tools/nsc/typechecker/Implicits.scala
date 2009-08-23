@@ -668,6 +668,26 @@ self: Analyzer =>
       }
     }
 
+    /** Construct a fresh symbol tree for an implicit parameter */ 
+    def fixSymbols(tree : Tree) : Tree = new Transformer {
+      currentOwner = context.owner
+      override val treeCopy = new LazyTreeCopier
+    	override def transform(tr : Tree) = super.transform(tr match {
+	    	case Function(vparams, body) => {
+	    		// New tree
+	    		val sym = tr.symbol cloneSymbol currentOwner
+	    		val res = tr.duplicate setSymbol sym
+	    		// New parameter symbols
+	    		var oldsyms = vparams map (_.symbol)
+	    		var newsyms = cloneSymbols(oldsyms, sym)
+	    		// Fix all symbols
+	    		new TreeSymSubstituter(oldsyms, newsyms) traverse res
+	    		res
+	    	}
+	    	case x => x
+    	})
+    } transform tree
+
     /** Return cached search result if found. Otherwise update cache
      *  but keep within sizeLimit entries
      */
@@ -676,7 +696,7 @@ self: Analyzer =>
         hits += 1
         if (sr == SearchFailure) sr
         else {
-          val result = new SearchResult(sr.tree.duplicate, sr.subst)
+          val result = new SearchResult(fixSymbols(sr.tree.duplicate), sr.subst)
           for (t <- result.tree) t.setPos(tree.pos.focus)
           result
         }

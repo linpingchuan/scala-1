@@ -1411,10 +1411,13 @@ trait Types {
 
     // @M: propagate actual type params (args) to `tp', by replacing formal type parameters with actual ones
     def transform(tp: Type): Type = {
+      def withTypeArgs(xs: List[Type]) =
+        tp.asSeenFrom(pre, sym.owner).instantiateTypeParams(sym.typeParams, xs)
       val args = typeArgsOrDummies
-      if (args.length == sym.typeParams.length)
-        tp.asSeenFrom(pre, sym.owner).instantiateTypeParams(sym.typeParams, args)
-      else { assert(sym.typeParams.isEmpty || (args exists (_.isError)), tp); tp }
+      
+      if (args.length == sym.typeParams.length) withTypeArgs(args)
+      else if (sym.typeParams.isEmpty || (args exists (_.isError))) tp
+      else withTypeArgs(dummyArgs)
       // @M TODO maybe we shouldn't instantiate type params if isHigherKinded -- probably needed for partial type application though
     }
 
