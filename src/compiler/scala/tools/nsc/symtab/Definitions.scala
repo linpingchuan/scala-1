@@ -112,6 +112,7 @@ trait Definitions {
           appliedType(ClassClass.tpe, List(classType))
         else ClassClass.tpe
       def Predef_error    = getMember(PredefModule, nme.error)
+      def Predef_identity = getMember(PredefModule, nme.identity)
       def Predef_conforms = getMember(PredefModule, nme.conforms)
     lazy val ConsoleModule: Symbol = getModule("scala.Console")
     lazy val ScalaRunTimeModule: Symbol = getModule("scala.runtime.ScalaRunTime")
@@ -178,10 +179,10 @@ trait Definitions {
       def methodCache_add   = getMember(MethodCacheClass, nme.add_)
 
     // scala.reflect
-    lazy val ManifestClass        = getClass("scala.reflect.Manifest")
-    lazy val ManifestModule       = getModule("scala.reflect.Manifest")
-    lazy val FullManifestClass   = getClass("scala.reflect.FullManifest")
-    lazy val FullManifestModule  = getModule("scala.reflect.FullManifest")
+    lazy val PartialManifestClass = getClass("scala.reflect.ClassManifest")
+    lazy val PartialManifestModule       = getModule("scala.reflect.ClassManifest")
+    lazy val FullManifestClass   = getClass("scala.reflect.Manifest")
+    lazy val FullManifestModule  = getModule("scala.reflect.Manifest")
     lazy val OptManifestClass     = getClass("scala.reflect.OptManifest")
     lazy val NoManifest           = getModule("scala.reflect.NoManifest")
     lazy val CodeClass            = getClass(sn.Code)
