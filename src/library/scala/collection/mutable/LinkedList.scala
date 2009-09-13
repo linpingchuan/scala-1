@@ -25,6 +25,11 @@ class LinkedList[A] extends LinearSequence[A]
                        with TraversableClass[A, LinkedList]
                        with LinkedListTemplate[A, LinkedList[A]] {
   protected def makeEmpty = new LinkedList[A]
+  protected def makeFromSequence(seq: Sequence[A]) = {
+    val builder = LinkedList.newBuilder[A]
+    builder ++= seq
+    builder.result()
+  }
   override def companion: Companion[LinkedList] = LinkedList
 }
 
