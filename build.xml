@@ -433,6 +433,40 @@ QUICK BUILD (QUICK)
       target="1.5" source="1.5">
       <compilerarg line="${javac.args}"/>
     </javac>
+
+    <scalacfork
+      destdir="${build-quick.dir}/classes/library"
+      compilerpathref="locker.classpath"
+      srcpath="${src.dir}/library"
+      params="${scalac.args.all}"
+      srcdir="${src.dir}/library"
+      jvmargs="${scalacfork.jvmargs}">
+      <include name="scala/collection/generic/*.scala"/>
+      <include name="scala/collection/*.scala />
+      <exclude name="scala/Predef.scala"/>
+      <exclude name="scala/LowPriorityImplicits.scala"/>
+      <compilationpath>
+        <pathelement location="${build-quick.dir}/classes/library"/>
+      </compilationpath>
+    </scalacfork>
+
+    <scalacfork
+      destdir="${build-quick.dir}/classes/library"
+      compilerpathref="locker.classpath"
+      srcpath="${src.dir}/library"
+      params="${scalac.args.all}"
+      srcdir="${src.dir}/library"
+      jvmargs="${scalacfork.jvmargs}">
+      <include name="scala/collection/mutable/*.scala" />
+      <include name="scala/collection/immutable/*.scala" />
+      <exclude name="scala/Predef.scala"/>
+      <exclude name="scala/LowPriorityImplicits.scala"/>
+      <compilationpath>
+        <pathelement location="${build-quick.dir}/classes/library"/>
+      </compilationpath>
+    </scalacfork>
+
+
     <scalacfork
       destdir="${build-quick.dir}/classes/library"
       compilerpathref="locker.classpath"
