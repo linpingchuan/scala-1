@@ -21,17 +21,30 @@ import scala.collection.generic._
  *  @version 2.8
  */
 @serializable
-class LinkedList[A](_elem: A, _next: LinkedList[A]) extends LinearSequence[A] 
-                                                       with TraversableClass[A, LinkedList]
-                                                       with LinkedListTemplate[A, LinkedList[A]] {
-  elem = _elem
-  next = _next
+class LinkedList[A] extends LinearSequence[A] 
+                       with TraversableClass[A, LinkedList]
+                       with LinkedListTemplate[A, LinkedList[A]] {
+  protected def makeEmpty = new LinkedList[A]
   override def companion: Companion[LinkedList] = LinkedList
 }
 
 object LinkedList extends SequenceFactory[LinkedList] {
   implicit def builderFactory[A]: BuilderFactory[A, LinkedList[A], Coll] = new VirtualBuilderFactory[A]
-  def newBuilder[A]: Builder[A, LinkedList[A]] = (new MutableList) mapResult ((l: MutableList[A]) => l.toLinkedList)
+  def newBuilder[A] = new Builder[A, LinkedList[A]] {
+    var front: LinkedList[A] = _
+    var back: LinkedList[A] = _
+    clear() // initializes front and back
+    def +=(elem: A): this.type = {
+      back.appendElem(elem)
+      back = back.tail
+      this
+    }
+    def clear() {
+      front = new LinkedList[A]
+      back = front
+    }
+    def result() = front
+  }
 }
 
 

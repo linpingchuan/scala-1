@@ -75,7 +75,7 @@ class MutableList[A] extends LinearSequence[A]
   def get(n: Int): Option[A] = first0.get(n)
 
   protected def prependElem(elem: A): Unit = {
-    first0 = new LinkedList[A](elem, first0)
+    first0 += elem
     if (len == 0)
       last0 = first0
     len = len + 1
@@ -85,8 +85,8 @@ class MutableList[A] extends LinearSequence[A]
     if (len == 0)
       prependElem(elem)
     else {
-      last0.next = new LinkedList[A](elem, null)
-      last0 = last0.next
+      last0.append(elem)
+      last0 = last0.tail
       len = len + 1
     }
 
@@ -97,7 +97,7 @@ class MutableList[A] extends LinearSequence[A]
   override def iterator: Iterator[A] =
     if (first0 eq null) Iterator.empty else first0.iterator
 
-  override def last = last0.elem
+  override def last = last0.head
 
   /** Returns an instance of <code>scala.List</code> containing the same
    *  sequence of elements.

@@ -79,6 +79,7 @@ final class ListBuffer[A]
         cursor.asInstanceOf[::[A]].tl = newElem
       }
     } catch {
+      //TODO: this should catch more specific exceptions
       case ex: Exception => throw new IndexOutOfBoundsException(n.toString())
     }
   }

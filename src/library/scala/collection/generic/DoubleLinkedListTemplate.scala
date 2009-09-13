@@ -22,7 +22,7 @@ import scala.collection._
  */
 trait DoubleLinkedListTemplate[A, This >: Null <: LinearSequence[A] with DoubleLinkedListTemplate[A, This]] extends LinkedListTemplate[A, This] { self =>
 
-  var prev: This = _
+  protected var prev: This = _
 
   override def append(that: This): Unit = 
     if (next eq null) {
