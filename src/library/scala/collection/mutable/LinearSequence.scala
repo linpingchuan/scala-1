@@ -25,5 +25,5 @@ trait LinearSequence[A] extends Sequence[A]
 
 object LinearSequence extends SequenceFactory[LinearSequence] {
   implicit def builderFactory[A]: BuilderFactory[A, LinearSequence[A], Coll] = new VirtualBuilderFactory[A]
-  def newBuilder[A]: Builder[A, LinearSequence[A]] = new MutableList[A]
+  def newBuilder[A]: Builder[A, LinearSequence[A]] = LinkedList.newBuilder[A]
 }
