@@ -90,7 +90,8 @@ class MutableList[A] extends LinearSequence[A]
       len = len + 1
     }
 
-  @deprecated("use clear instead") def reset() { clear() }
+  @deprecated("use clear instead")
+  def reset() { clear() }
 
   /** Returns an iterator over all elements of this list.
    */

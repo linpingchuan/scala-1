@@ -51,6 +51,3 @@ object LinkedList extends SequenceFactory[LinkedList] {
     def result() = front
   }
 }
-
-
-

@@ -20,7 +20,8 @@ import scala.collection._
  *  @author  Matthias Zenger
  *  @version 1.0, 08/07/2003
  */
-trait DoubleLinkedListTemplate[A, This >: Null <: LinearSequence[A] with DoubleLinkedListTemplate[A, This]] extends LinkedListTemplate[A, This] { self =>
+trait DoubleLinkedListTemplate[A, This >: Null <: LinearSequence[A] with DoubleLinkedListTemplate[A, This]] extends LinkedListTemplate[A, This] {
+  self: This =>
 
   protected var prev: This = _
 
