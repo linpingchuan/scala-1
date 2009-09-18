@@ -397,7 +397,7 @@ trait Typers { self: Analyzer =>
           /*
           if (formals.exists(_.typeSymbol == ByNameParamClass) && formals.length != 1)
             error(pos, "methods with `=>'-parameter can be converted to function values only if they take no other parameters")
-          if (formals exists (_.typeSymbol == RepeatedParamClass))
+          if (formals exists (isRepeatedParamType(_)))
             error(pos, "methods with `*'-parameters cannot be converted to function values");
           */
           if (restpe.isDependent)
@@ -913,7 +913,7 @@ trait Typers { self: Analyzer =>
             case _ =>
               false
           }
-          if (isStructuralType(pt) && tree.tpe.typeSymbol == ArrayClass) {
+          if (isStructuralType(pt) && tree.tpe.typeSymbol == ArrayClass && !settings.newArrays.value) {
             // all Arrays used as structural refinement typed values must be boxed
             // this does not solve the case where the type to be adapted to comes
             // from a type variable that was bound by a strctural but is instantiated
@@ -1160,19 +1160,22 @@ trait Typers { self: Analyzer =>
             else
               psym addChild context.owner
           }
-          if (!(selfType <:< parent.tpe.typeOfThis) && 
-              !phase.erasedTypes &&     
-              !(context.owner hasFlag SYNTHETIC) && // don't do this check for synthetic concrete classes for virtuals (part of DEVIRTUALIZE)
-              !(settings.suppressVTWarn.value))
-          { 
-            //Console.println(context.owner);//DEBUG
-            //Console.println(context.owner.unsafeTypeParams);//DEBUG
-            //Console.println(List.fromArray(context.owner.info.closure));//DEBUG
-            error(parent.pos, "illegal inheritance;\n self-type "+
-                  selfType+" does not conform to "+parent +
-                  "'s selftype "+parent.tpe.typeOfThis)
-            if (settings.explaintypes.value) explainTypes(selfType, parent.tpe.typeOfThis)
-          }
+          // !!! This block temporarily disabled because as of r18692 it is breaking 
+          // the build.
+          //
+          // if (!(selfType <:< parent.tpe.typeOfThis) && 
+          //     !phase.erasedTypes &&     
+          //     !(context.owner hasFlag SYNTHETIC) && // don't do this check for synthetic concrete classes for virtuals (part of DEVIRTUALIZE)
+          //     !(settings.suppressVTWarn.value))
+          // { 
+          //   //Console.println(context.owner);//DEBUG
+          //   //Console.println(context.owner.unsafeTypeParams);//DEBUG
+          //   //Console.println(List.fromArray(context.owner.info.closure));//DEBUG
+          //   error(parent.pos, "illegal inheritance;\n self-type "+
+          //         selfType+" does not conform to "+parent +
+          //         "'s selftype "+parent.tpe.typeOfThis)
+          //   if (settings.explaintypes.value) explainTypes(selfType, parent.tpe.typeOfThis)
+          // }
           if (parents exists (p => p != parent && p.tpe.typeSymbol == psym && !psym.isError))
             error(parent.pos, psym+" is inherited twice")
         }
@@ -1446,7 +1449,7 @@ trait Typers { self: Analyzer =>
         case Apply(fn, args) =>
           val (superConstr, args1) = decompose(fn)
           val formals = fn.tpe.paramTypes
-          val args2 = if (formals.isEmpty || formals.last.typeSymbol != RepeatedParamClass) args
+          val args2 = if (formals.isEmpty || !isRepeatedParamType(formals.last)) args
                       else args.take(formals.length - 1) ::: List(EmptyTree)
           if (args2.length != formals.length)
             assert(false, "mismatch " + clazz + " " + formals + " " + args2);//debug 
@@ -1519,7 +1522,7 @@ trait Typers { self: Analyzer =>
       val tparams1 = ddef.tparams mapConserve typedTypeDef
       val vparamss1 = ddef.vparamss mapConserve (_ mapConserve typedValDef)
       for (vparams1 <- vparamss1; if !vparams1.isEmpty; vparam1 <- vparams1.init) {
-        if (vparam1.symbol.tpe.typeSymbol == RepeatedParamClass)
+        if (isRepeatedParamType(vparam1.symbol.tpe))
           error(vparam1.pos, "*-parameter must come last")
       }
       var tpt1 = checkNoEscaping.privates(meth, typedType(ddef.tpt))           
@@ -1574,10 +1577,7 @@ trait Typers { self: Analyzer =>
           }
         }
 
-        if (meth.paramss.exists( ps => {
-          ps.exists(_.hasFlag(DEFAULTPARAM)) &&
-          (ps.last.tpe.typeSymbol == RepeatedParamClass)
-        }))
+        if (meth.paramss.exists(ps => ps.exists(_.hasFlag(DEFAULTPARAM)) && isRepeatedParamType(ps.last.tpe)))
           error(meth.pos, "a parameter section with a `*'-parameter is not allowed to have default arguments")
       }
 
@@ -3657,7 +3657,18 @@ trait Typers { self: Analyzer =>
           typed1(atPos(tree.pos)(Block(stats, Apply(expr, args))), mode, pt)
 
         case Apply(fun, args) =>
-          typedApply(fun, args)
+          typedApply(fun, args) match {
+            case Apply(Select(New(tpt), name), args) 
+            if (settings.newArrays.value && tpt.tpe.typeSymbol == ArrayClass && args.length == 1 && erasure.isTopLevelGenericArray(tpt.tpe)) =>
+              // convert new Array[T](len) to evidence[ClassManifest[T]].newArray(len)
+              val newArrayApp = atPos(tree.pos) {
+                val manif = getManifestTree(tree.pos, tpt.tpe.typeArgs.head, false)
+                Apply(Select(manif, nme.newArray), args)
+              }
+              typed(newArrayApp, mode, pt)
+            case tree1 =>
+              tree1
+          }
 
         case ApplyDynamic(qual, args) =>
           val reflectiveCalls = !(settings.refinementMethodDispatch.value == "invoke-dynamic") 
@@ -3881,16 +3892,17 @@ trait Typers { self: Analyzer =>
       case None => typed(tree, pt)
     }
 
-    def findManifest(tp: Type, full: Boolean) = 
+    def findManifest(tp: Type, full: Boolean) = atPhase(currentRun.typerPhase) {
       inferImplicit(
         EmptyTree, 
         appliedType((if (full) FullManifestClass else PartialManifestClass).typeConstructor, List(tp)),
         true, false, context)
+    }
 
     def getManifestTree(pos: Position, tp: Type, full: Boolean): Tree = {
       val manifestOpt = findManifest(tp, false)
       if (manifestOpt.tree.isEmpty) {
-        error(pos, "cannot find "+(if (full) "" else "class ")+"manifest for element type of "+tp)
+        error(pos, "cannot find "+(if (full) "" else "class ")+"manifest for element type "+tp)
         Literal(Constant(null))
       } else {
         manifestOpt.tree
