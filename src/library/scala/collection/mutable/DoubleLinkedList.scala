@@ -9,7 +9,8 @@
 // $Id$
 
 
-package scala.collection.mutable
+package scala.collection
+package mutable
 
 import generic._
 

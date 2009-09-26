@@ -9,7 +9,8 @@
 // $Id$
 
 
-package scala.collection.mutable
+package scala.collection
+package mutable
 
 import scala.collection.{ LinearSequenceLike, TraversableLike }
 import annotation.tailrec
@@ -26,7 +27,9 @@ import scala.{ collection => col }
  */
 trait LinkedListLike[A, This >: Null <: LinearSequence[A] with LinkedListLike[A, This]]
       extends LinearSequenceLike[A, This] {
-  self: This =>
+  //self: This =>
+  
+  private def self = me.asInstanceOf[This]
   
   private var elem: A = _
   private var next: This = _

@@ -9,7 +9,8 @@
 // $Id$
 
 
-package scala.collection.mutable
+package scala.collection
+package mutable
 
 import scala.collection.generic.{ SequenceFactory, GenericTraversableTemplate, BuilderFactory }
 import scala.{ collection => col }
