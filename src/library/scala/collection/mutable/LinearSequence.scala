@@ -9,10 +9,10 @@
 // $Id$
 
 
-package scala.collection
-package mutable
+package scala.collection.mutable
 
-import generic._
+import scala.collection.generic._
+
 
 /** A subtrait of <code>collection.Sequence</code> which represents sequences
  *  that cannot be mutated.
@@ -22,7 +22,7 @@ import generic._
 trait LinearSequence[A] extends Sequence[A] 
                            with scala.collection.LinearSequence[A] 
                            with GenericTraversableTemplate[A, LinearSequence]
-                           with LinearSequenceLike[A, LinearSequence[A]] {
+                           with scala.collection.LinearSequenceLike[A, LinearSequence[A]] {
   override def companion: GenericCompanion[LinearSequence] = LinearSequence
 }
 

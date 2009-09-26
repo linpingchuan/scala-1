@@ -25,8 +25,7 @@ import scala.{ collection => col }
  *  @since   2.8
  */
 trait LinkedListLike[A, This >: Null <: LinearSequence[A] with LinkedListLike[A, This]]
-      extends LinearSequenceLike[A, This] 
-         with TraversableLike[A, This] {
+      extends LinearSequenceLike[A, This] {
   self: This =>
   
   private var elem: A = _
