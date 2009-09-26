@@ -25,11 +25,11 @@ import scala.{ collection => col }
  *  @version 2.8
  *  @since   2.8
  */
-trait LinkedListLike[A, This >: Null <: LinearSequence[A] with LinkedListLike[A, This]]
+trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
       extends LinearSequenceLike[A, This] {
-  //self: This =>
+  self: This =>
   
-  private def self = me.asInstanceOf[This]
+  //private def self = me.asInstanceOf[This]
   
   private var elem: A = _
   private var next: This = _
