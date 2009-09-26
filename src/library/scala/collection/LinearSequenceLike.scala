@@ -6,15 +6,13 @@
 **                          |/                                          **
 \*                                                                      */
 
-// $Id: LinearSequenceTemplate.scala 18646 2009-09-04 16:56:11Z odersky $
+// $Id$
 
 
 package scala.collection
 import generic._
 
 import mutable.ListBuffer
-// import immutable.{List, Nil, ::}
-import generic._
 import scala.util.control.Breaks._
 
 /** Class <code>Linear[A]</code> represents linear sequences of elements.

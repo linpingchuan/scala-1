@@ -11,7 +11,8 @@
 
 package scala.collection.mutable
 
-import scala.collection.generic._
+import scala.collection.generic.{ GenericTraversableTemplate, SequenceFactory, GenericCompanion, BuilderFactory }
+import scala.{ collection => col }
 
 /** This class implements single linked lists where both the head (<code>elem</code>)
  *  and the tail (<code>next</code>) are mutable.
@@ -22,15 +23,16 @@ import scala.collection.generic._
  */
 @serializable
 class LinkedList[A] extends LinearSequence[A] 
-                       with TraversableClass[A, LinkedList]
-                       with LinkedListTemplate[A, LinkedList[A]] {
+                       with GenericTraversableTemplate[A, LinkedList]
+                       with LinkedListLike[A, LinkedList[A]] {
   protected def makeEmpty = new LinkedList[A]
-  protected def makeFromSequence(seq: Sequence[A]) = {
+
+  protected def makeFromSequence(seq: col.Sequence[A]) = {
     val builder = LinkedList.newBuilder[A]
     builder ++= seq
     builder.result()
   }
-  override def companion: Companion[LinkedList] = LinkedList
+  override def companion: GenericCompanion[LinkedList] = LinkedList  //TODO: should this be a lower class, such as SequenceFactory?
 }
 
 object LinkedList extends SequenceFactory[LinkedList] {
@@ -40,7 +42,7 @@ object LinkedList extends SequenceFactory[LinkedList] {
     var back: LinkedList[A] = _
     clear() // initializes front and back
     def +=(elem: A): this.type = {
-      back.appendElem(elem)
+      back.append(elem)
       back = back.tail
       this
     }

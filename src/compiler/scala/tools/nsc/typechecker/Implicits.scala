@@ -2,7 +2,7 @@
  * Copyright 2005-2009 LAMP/EPFL
  * @author  Martin Odersky
  */
-// $Id: Typers.scala 17229 2009-03-02 19:09:42Z extempore $
+// $Id$
 
 //todo: rewrite or disllow new T where T is a mixin (currently: <init> not a member of T)
 //todo: use inherited type info also for vars and values
@@ -298,9 +298,9 @@ self: Analyzer =>
           isStable(info.pre)) {
 
         val itree = atPos(tree.pos.focus) {
-          if (info.pre == NoPrefix) Ident(info.name)
+          if (info.pre == NoPrefix) Ident(info.name) 
           else Select(gen.mkAttributedQualifier(info.pre), info.name)
-        }
+        } 
         //if (traceImplicits) println("typed impl?? "+info.name+":"+info.tpe+" ==> "+itree+" with "+wildPt)
         def fail(reason: String): SearchResult = {
           if (settings.XlogImplicits.value)
@@ -310,10 +310,11 @@ self: Analyzer =>
         try {
           val itree1 = 
             if (isView)
-              typed1(
+              typed1 (
                 atPos(itree.pos) (
                   Apply(itree, List(Ident("<argument>").setType(approximate(pt.typeArgs.head))))), 
-                  EXPRmode, approximate(pt.typeArgs.tail.head))
+                EXPRmode, approximate(pt.typeArgs.tail.head)
+              )
             else
               typed1(itree, EXPRmode, wildPt)
 
@@ -602,14 +603,14 @@ self: Analyzer =>
     private def manifestOfType(tp: Type, full: Boolean): Tree = {
       
       /** Creates a tree that calls the factory method called constructor in object reflect.Manifest */
-      def manifestFactoryCall(constructor: String, args: Tree*): Tree =
+      def manifestFactoryCall(constructor: String, tparg: Type, args: Tree*): Tree =
         if (args contains EmptyTree) EmptyTree
         else 
           typed { atPos(tree.pos.focus) {
             Apply(
               TypeApply(
                 Select(gen.mkAttributedRef(if (full) FullManifestModule else PartialManifestModule), constructor),
-                List(TypeTree(tp))
+                List(TypeTree(tparg))
               ),
               args.toList
             )
@@ -623,7 +624,7 @@ self: Analyzer =>
 
       def mot(tp0: Type): Tree = tp0.normalize match {
         case ThisType(_) | SingleType(_, _) =>
-          manifestFactoryCall("singleType", gen.mkAttributedQualifier(tp0)) 
+          manifestFactoryCall("singleType", tp, gen.mkAttributedQualifier(tp0)) 
         case ConstantType(value) =>
           manifestOfType(tp0.deconst, full)
         case TypeRef(pre, sym, args) =>
@@ -631,15 +632,17 @@ self: Analyzer =>
             typed { atPos(tree.pos.focus) {
               Select(gen.mkAttributedRef(FullManifestModule), sym.name.toString)
             }}
-          } else if (sym.isClass) {
+          } else if (sym == ArrayClass && args.length == 1) {
+            manifestFactoryCall("arrayType", args.head, findSubManifest(args.head))
+           } else if (sym.isClass) {
             val suffix = gen.mkClassOf(tp0) :: (args map findSubManifest)
             manifestFactoryCall(
-              "classType", 
+              "classType", tp, 
               (if ((pre eq NoPrefix) || pre.typeSymbol.isStaticOwner) suffix
                else findSubManifest(pre) :: suffix): _*)
           } else if (sym.isAbstractType && !sym.isTypeParameterOrSkolem && !sym.isExistential) {
             manifestFactoryCall(
-              "abstractType", 
+              "abstractType", tp,
               findSubManifest(pre) :: Literal(sym.name.toString) :: findManifest(tp0.bounds.hi) :: (args map findSubManifest): _*)
           } else {
             EmptyTree  // a manifest should have been found by normal searchImplicit
@@ -647,7 +650,7 @@ self: Analyzer =>
         case RefinedType(parents, decls) =>
           // refinement is not generated yet
           if (parents.length == 1) findManifest(parents.head)
-          else manifestFactoryCall("intersectionType", parents map (findSubManifest(_)): _*)
+          else manifestFactoryCall("intersectionType", tp, parents map (findSubManifest(_)): _*)
         case ExistentialType(tparams, result) =>
           mot(result)
         case _ =>

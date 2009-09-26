@@ -6,12 +6,13 @@
 **                          |/                                          **
 \*                                                                      */
 
-// $Id: StringBuilder.scala 16884 2009-01-09 16:52:09Z cunei $
+// $Id$
 
 
-package scala.collection.mutable
+package scala.collection
+package mutable
 
-import collection.generic._
+import generic._
 import compat.Platform.arraycopy
 import scala.reflect.Manifest
 
@@ -716,7 +717,7 @@ final class StringBuilder(initCapacity: Int, private val initValue: String)
    *               substring, <code>-1</code> is returned.
    *  @throws NullPointerException if <code>str</code> is <code>null</code>.
    */
-  def indexOf(str: String): Int = indexOfSeq(str.toArray)
+  def indexOf(str: String): Int = indexOf(str, 0)
 
   /** <p>
    *    Returns the index within this string of the first occurrence of the
@@ -735,7 +736,7 @@ final class StringBuilder(initCapacity: Int, private val initValue: String)
    *  @return           the index within this string of the first occurrence
    *                    of the specified substring, starting at the specified index.
    */
-  def indexOf(str: String, fromIndex: Int): Int = indexOfSeq(str.toArray, fromIndex)
+  def indexOf(str: String, fromIndex: Int): Int = indexOfSeq(str.toVector, fromIndex)
 
   /** <p>
    *    Returns the index within this string of the rightmost occurrence
@@ -757,7 +758,7 @@ final class StringBuilder(initCapacity: Int, private val initValue: String)
    *              a substring, <code>-1</code> is returned.
    * @throws NullPointerException  if <code>str</code> is <code>null</code>.
    */
-  def lastIndexOf(str: String): Int = lastIndexOfSeq(str.toArray, count)
+  def lastIndexOf(str: String): Int = lastIndexOf(str, count)
 
   /** <p>
    *    Returns the index within this string of the last occurrence of the
@@ -776,7 +777,7 @@ final class StringBuilder(initCapacity: Int, private val initValue: String)
    *  @return            the index within this sequence of the last occurrence
    *                     of the specified substring.
    */
-  def lastIndexOf(str: String, fromIndex: Int): Int = lastIndexOfSeq(str.toArray, fromIndex)
+  def lastIndexOf(str: String, fromIndex: Int): Int = lastIndexOfSeq(str.toVector, fromIndex)
 
   /** <p>
    *    Causes this character sequence to be replaced by the reverse of the
@@ -843,10 +844,8 @@ final class StringBuilder(initCapacity: Int, private val initValue: String)
 }
 
 
-object StringBuilder {
-
-  type Array[T] = scala.Array[T] // !!!
-
+object StringBuilder
+{
   // method <code>java.util.Arrays.copyOf</code> exists since 1.6
   private def copyOf(src: Array[Char], newLength: Int): Array[Char] = {
     val dest = new Array[Char](newLength)

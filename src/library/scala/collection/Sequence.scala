@@ -6,12 +6,13 @@
 **                          |/                                          **
 \*                                                                      */
 
-// $Id: Sequence.scala 16092 2008-09-12 10:37:06Z nielsen $
+// $Id$
 
 
 package scala.collection
 
-import scala.collection.generic._
+import generic._
+import mutable.Builder
 
 /** <p>
  *    Class <code>Sequence[A]</code> represents sequences of elements
@@ -31,9 +32,9 @@ import scala.collection.generic._
  */
 trait Sequence[+A] extends PartialFunction[Int, A] 
                       with Iterable[A] 
-                      with TraversableClass[A, Sequence]
-                      with SequenceTemplate[A, Sequence[A]] {
-  override def companion: Companion[Sequence] = Sequence
+                      with GenericTraversableTemplate[A, Sequence]
+                      with SequenceLike[A, Sequence[A]] {
+  override def companion: GenericCompanion[Sequence] = Sequence
 }
 
 /** Factory object for <code>Sequence</code> trait.

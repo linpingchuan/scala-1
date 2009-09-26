@@ -11,7 +11,7 @@
 
 package scala.collection.mutable
 
-import scala.collection.generic._
+import generic._
 
 /** This class implements single linked lists where both the head (<code>elem</code>)
  *  and the tail (<code>next</code>) are mutable.
@@ -21,10 +21,10 @@ import scala.collection.generic._
  *  @version 2.8
  */
 @serializable @SerialVersionUID(419155950203746706L)
-class DoubleLinkedList[A] extends LinearSequence[A]
-                          with TraversableClass[A, DoubleLinkedList]
-                          with DoubleLinkedListTemplate[A, DoubleLinkedList[A]] {
-  override def companion: Companion[DoubleLinkedList] = DoubleLinkedList
+class DoubleLinkedList[A](_elem: A, _next: DoubleLinkedList[A]) extends LinearSequence[A]
+                                                                   with GenericTraversableTemplate[A, DoubleLinkedList]
+                                                                   with DoubleLinkedListLike[A, DoubleLinkedList[A]] {
+  override def companion: GenericCompanion[DoubleLinkedList] = DoubleLinkedList
   override protected def makeEmpty = new DoubleLinkedList[A]
 }
 

@@ -6,7 +6,7 @@
 **                          |/                                          **
 \*                                                                      */
 
-// $Id: IterableProxy.scala 15458 2008-06-28 20:23:22Z stepancheg $
+// $Id$
 
 
 package scala.collection
@@ -21,4 +21,4 @@ import generic._
  *  @author  Martin Odersky
  *  @version 2.8
  */
-trait IterableProxy[+A] extends Iterable[A] with IterableProxyTemplate[A, Iterable[A]] 
+trait IterableProxy[+A] extends Iterable[A] with IterableProxyLike[A, Iterable[A]] 

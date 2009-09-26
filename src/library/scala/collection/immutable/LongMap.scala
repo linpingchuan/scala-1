@@ -1,10 +1,11 @@
-package scala.collection.immutable;
+package scala.collection
+package immutable
 
 /**
  * @author David MacIver
  */
 private[immutable] object LongMapUtils{
-  def zero(i : Long, mask : Long) = (i & mask) == 0;    
+  def zero(i : Long, mask : Long) = (i & mask) == 0L;
   def mask(i : Long, mask : Long) = i & (complement(mask - 1) ^ mask)
   def hasMatch(key : Long, prefix : Long, m : Long) = mask(key, m) == prefix;
   def unsignedCompare(i : Long, j : Long) = (i < j) ^ (i < 0) ^ (j < 0)
@@ -134,7 +135,7 @@ import LongMap._;
  * <a href="http://citeseer.ist.psu.edu/okasaki98fast.html">Fast Mergeable Long Maps</a>
  * by Okasaki and Gill. Essentially a trie based on binary digits of the the integers.
  */
-sealed abstract class LongMap[+T] extends scala.collection.immutable.Map[Long, T] with scala.collection.generic.ImmutableMapTemplate[Long, T, LongMap[T]] {
+sealed abstract class LongMap[+T] extends Map[Long, T] with MapLike[Long, T, LongMap[T]] {
   override def empty: LongMap[T] = LongMap.Nil;
 
   override def toList = {

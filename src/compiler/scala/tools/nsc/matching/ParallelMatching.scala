@@ -170,7 +170,7 @@ trait ParallelMatching extends ast.TreeDSL {
         }
       }
 
-      applyAndReturn[Tree](resetTraverser traverse _)(lxtt transform tree)
+      returning[Tree](resetTraverser traverse _)(lxtt transform tree)
     }
     
     final def isReached(bx: Int)        = labels contains bx
@@ -366,7 +366,7 @@ trait ParallelMatching extends ast.TreeDSL {
 
       // tests
       def isDefined = sym ne NoSymbol
-      def isSimple  = tpe.isChar || tpe.isInt
+      def isSimple  = tpe.isByte || tpe.isShort || tpe.isChar || tpe.isInt
 
       // sequences
       def seqType   = tpe.widen baseType SeqClass
@@ -1239,10 +1239,7 @@ trait ParallelMatching extends ast.TreeDSL {
             case v @ Constant(null) if isAnyRef(scrutTree.tpe)  => scrutTree ANY_EQ NULL
             case v                                              => scrutTree ANY_== Literal(v)
           }
-        case _: SingletonType if useEqTest                      => 
-          // See ticket #1503 for why both these checks are necessary.
-          (REF(tpe.termSymbol) ANY_== scrutTree) AND (scrutTree IS tpe.widen)
-          
+        case _: SingletonType if useEqTest                      => REF(tpe.termSymbol) ANY_== scrutTree
         case _ if scrutTree.tpe <:< tpe && isAnyRef(tpe)        => scrutTree OBJ_!= NULL
         case _                                                  => scrutTree IS tpe
       })

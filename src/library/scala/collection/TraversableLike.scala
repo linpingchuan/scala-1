@@ -6,15 +6,14 @@
 **                          |/                                          **
 \*                                                                      */
 
-// $Id: TraversableLike.scala 18589 2009-08-27 14:45:35Z odersky $
+// $Id$
 
 
 package scala.collection
 import generic._
-import scala.reflect.ClassManifest
 
-// import immutable.{List, Stream, Nil} //!!!
-import mutable.{Buffer, ArrayBuffer, ListBuffer}
+import scala.reflect.ClassManifest
+import mutable.{Builder, Buffer, ArrayBuffer, ListBuffer}
 import annotation.experimental
 
 /** <p>

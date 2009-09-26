@@ -6,15 +6,14 @@
 **                          |/                                          **
 \*                                                                      */
 
-// $Id: Traversable.scala 15188 2008-05-24 15:01:02Z stepancheg $
+// $Id$
 
 
 package scala.collection
 
-// import immutable.{List, Stream, Nil}
-import mutable.{Buffer, ArrayBuffer, ListBuffer}
-import scala.util.control.Breaks
 import generic._
+import mutable.{Builder, Buffer, ArrayBuffer, ListBuffer}
+import scala.util.control.Breaks
 
 /** <p>
  *    A template trait for traversable collections.
@@ -30,11 +29,11 @@ import generic._
  *  @author Martin Odersky
  *  @version 2.8
  */
-trait Traversable[+A] extends TraversableTemplate[A, Traversable[A]] 
-                         with TraversableClass[A, Traversable] {
-  def companion: Companion[Traversable] = Traversable
+trait Traversable[+A] extends TraversableLike[A, Traversable[A]] 
+                         with GenericTraversableTemplate[A, Traversable] {
+  def companion: GenericCompanion[Traversable] = Traversable
 
-  /* The following methods are inherited from TraversableTemplate
+  /* The following methods are inherited from TraversableLike
    * 
   override def isEmpty: Boolean
   override def size: Int

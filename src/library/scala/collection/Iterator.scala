@@ -6,7 +6,7 @@
 **                          |/                                          **
 \*                                                                      */
 
-// $Id: Iterator.scala 15939 2008-08-26 14:33:17Z stepancheg $
+// $Id$
 
 
 package scala.collection
@@ -366,6 +366,15 @@ trait Iterator[+A] { self =>
     }
   }
   
+  /** Returns an iterator over all the elements of this iterator which
+   *  do not satisfy the predicate <code>p</code>.
+   *
+   *  @param p the predicate used to filter.
+   *  @return  the elements of this iterator not satisfying <code>p</code>.
+   */
+  
+  def filterNot(p: A => Boolean): Iterator[A] = filter(!p(_))
+  
  /** Returns a new iterator based on the partial function <code>pf</code>,  
   *  containing <code>pf(x)</code> for all the elements which are defined on pf.
   *  The order of the elements is preserved.
@@ -669,7 +678,7 @@ trait Iterator[+A] { self =>
    *
    *  @param op  The operator to apply
    *  @return <code>op(... op(a<sub>0</sub>,a<sub>1</sub>), ..., a<sub>n</sub>)</code> 
-      if the iterator yields elements
+   *  if the iterator yields elements
    *          <code>a<sub>0</sub>, a<sub>1</sub>, ..., a<sub>n</sub></code>.
    *  @throws Predef.UnsupportedOperationException if the iterator is empty.
    */

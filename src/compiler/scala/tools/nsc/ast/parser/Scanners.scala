@@ -2,7 +2,7 @@
  * Copyright 2005-2009 LAMP/EPFL
  * @author  Martin Odersky
  */
-// $Id: Scanners.scala 17285 2009-03-11 13:51:56Z rytz $
+// $Id$
 package scala.tools.nsc
 package ast.parser
 
@@ -11,6 +11,7 @@ import SourceFile.{LF, FF, CR, SU}
 import Tokens._
 import scala.annotation.switch
 import scala.collection.mutable.{ListBuffer, ArrayBuffer}
+import scala.xml.Utility.{ isNameStart }
 
 trait Scanners {
   val global : Global
@@ -264,7 +265,7 @@ trait Scanners {
           val last = if (charOffset >= 2) buf(charOffset - 2) else ' '
           nextChar()
           last match {
-            case ' '|'\t'|'\n'|'{'|'('|'>' if xml.Parsing.isNameStart(ch) || ch == '!' || ch == '?' =>
+            case ' '|'\t'|'\n'|'{'|'('|'>' if isNameStart(ch) || ch == '!' || ch == '?' =>
               token = XMLSTART
             case _ =>
               // Console.println("found '<', but last is '"+in.last+"'"); // DEBUG
@@ -854,7 +855,7 @@ trait Scanners {
 
   def isSpecial(c: Char) = {
     val chtp = Character.getType(c)
-    chtp == Character.MATH_SYMBOL || chtp == Character.OTHER_SYMBOL
+    chtp == Character.MATH_SYMBOL.toInt || chtp == Character.OTHER_SYMBOL.toInt
   }
 
   def isOperatorPart(c : Char) : Boolean = (c: @switch) match {

@@ -11,7 +11,8 @@
 
 package scala.collection.mutable
 
-import scala.collection.generic._
+import scala.collection.generic.{ SequenceFactory, GenericTraversableTemplate, BuilderFactory }
+import scala.{ collection => col }
 
 /** <code>Queue</code> objects implement data structures that allow to
  *  insert and retrieve elements in a first-in-first-out (FIFO) manner.
@@ -22,10 +23,17 @@ import scala.collection.generic._
  */
 @serializable @cloneable
 class Queue[A] extends LinearSequence[A] 
-                  with TraversableClass[A, Queue]
-                  with LinkedListTemplate[A, Queue[A]]
+                  with GenericTraversableTemplate[A, Queue]
+                  with LinkedListLike[A, Queue[A]]
                   with Cloneable[Queue[A]] {
 
+  override def companion = Queue
+  protected def makeEmpty = new Queue[A]
+  protected def makeFromSequence(seq: col.Sequence[A]) = {
+    val builder = companion.newBuilder[A]
+    builder ++= seq
+    builder.result()
+  }
   /** Adds all elements to the queue.
    *
    *  @param  elems       the elements to add.
@@ -68,4 +76,23 @@ class Queue[A] extends LinearSequence[A]
    *  @return the first element.
    */
   def front: A = head
+}
+
+object Queue extends SequenceFactory[Queue] {
+  implicit def builderFactory[A]: BuilderFactory[A, Queue[A], Coll] = new VirtualBuilderFactory[A]
+  def newBuilder[A] = new Builder[A, Queue[A]] {
+    var front: Queue[A] = _
+    var back: Queue[A] = _
+    clear() // initializes front and back
+    def +=(elem: A): this.type = {
+      back.append(elem)
+      back = back.tail
+      this
+    }
+    def clear() {
+      front = new Queue[A]
+      back = front
+    }
+    def result() = front
+  }
 }

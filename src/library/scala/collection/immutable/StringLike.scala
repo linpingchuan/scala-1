@@ -6,14 +6,15 @@
 **                          |/                                          **
 \*                                                                      */
 
-// $Id: RichString.scala 18589 2009-08-27 14:45:35Z odersky $
+// $Id$
 
 
 package scala.collection
 package immutable
 
-import scala.util.matching.Regex
 import generic._
+import mutable.Builder
+import scala.util.matching.Regex
 
 object StringLike {
 
@@ -126,7 +127,7 @@ self =>
     else if (toString.length == 0) ""
     else {
       val chars = toString.toCharArray
-      chars(0) = chars(0).toUpperCase
+      chars(0) = chars(0).toUpper
       new String(chars)
     }
 
@@ -228,7 +229,7 @@ self =>
    *  @throws java.lang.IllegalArgumentException
    */
   def format(args : Any*) : String =
-    java.lang.String.format(toString, args.asInstanceOf[Seq[AnyRef]].toArray: _*)
+    java.lang.String.format(toString, args.asInstanceOf[Seq[AnyRef]]: _*)
 
   /** <p>
    *  Like format(args*) but takes an initial Locale parameter
@@ -245,6 +246,6 @@ self =>
    *  @throws java.lang.IllegalArgumentException
    */
   def format(l: java.util.Locale, args: Any*): String =
-    java.lang.String.format(l, toString, args.asInstanceOf[Seq[AnyRef]].toArray: _*)
+    java.lang.String.format(l, toString, args.asInstanceOf[Seq[AnyRef]]: _*)
 }
 
