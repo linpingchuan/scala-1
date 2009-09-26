@@ -9,7 +9,8 @@
 // $Id$
 
 
-package scala.collection.mutable
+package scala.collection
+package mutable
 
 /** This extensible class may be used as a basis for implementing double
  *  linked lists. Type variable <code>A</code> refers to the element type
@@ -21,7 +22,9 @@ package scala.collection.mutable
  *  @since   2.8
  */
 trait DoubleLinkedListLike[A, This >: Null <: LinearSequence[A] with DoubleLinkedListLike[A, This]] extends LinkedListLike[A, This] {
-  self: This =>
+  me =>
+
+  private def self = me.asInstanceOf[This]
 
   protected var prev: This = _
 
