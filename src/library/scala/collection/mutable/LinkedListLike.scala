@@ -22,6 +22,7 @@ import scala.{ collection => col }
  *  @author  Matthias Zenger
  *  @author  Martin Odersky
  *  @version 2.8
+ *  @since   2.8
  */
 trait LinkedListLike[A, This >: Null <: LinearSequence[A] with LinkedListLike[A, This]]
       extends LinearSequenceLike[A, This] 

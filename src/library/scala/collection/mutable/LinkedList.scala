@@ -20,6 +20,7 @@ import scala.{ collection => col }
  *  @author Matthias Zenger
  *  @author Martin Odersky
  *  @version 2.8
+ *  @since   1
  */
 @serializable
 class LinkedList[A] extends LinearSequence[A] 
