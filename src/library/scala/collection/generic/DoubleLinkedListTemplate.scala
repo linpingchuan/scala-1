@@ -25,12 +25,11 @@ trait DoubleLinkedListTemplate[A, This >: Null <: LinearSequence[A] with DoubleL
 
   protected var prev: This = _
 
-  override def append(that: This): Unit = 
-    if (next eq null) {
-      next = that
-      if (that ne null) that.prev = repr
-    } else
-      next.append(that)
+  override def appendNode(n: This): This = {
+    super.appendNode(n)
+    
+    self
+  }
 
   override def insert(that: This): Unit = if (that ne null) {
     that.append(next)

@@ -52,8 +52,7 @@ trait LinkedListTemplate[A, This >: Null <: Sequence[A] with LinkedListTemplate[
   def +=(e: A): This = prependElem(e)
 
   /** add <code>e</code> to the back of the list */
-  protected def appendElem(e: A): This = {
-    val n = makeEmpty
+  protected def appendNode(n: This): This = {
     val terminal = terminalNode
     terminal.elem = e
     terminal.next = n
@@ -61,7 +60,11 @@ trait LinkedListTemplate[A, This >: Null <: Sequence[A] with LinkedListTemplate[
   }
 
   //TODO: this must be wrong...
-  def append(e: A): Unit = appendElem(e)
+  def append(e: A) {
+    val n = makeEmpty
+    n.elem = e
+    appendElem(n)
+  }
 
   protected def prependNodes(nodes: This): This = {
     if (!nodes.isEmpty) {
