@@ -29,10 +29,8 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
       extends LinearSequenceLike[A, This] {
   self: This =>
   
-  //private def self = me.asInstanceOf[This]
-  
-  private var elem: A = _
-  private var next: This = _
+  protected var elem: A = _
+  protected var next: This = _
 
   private def clearElem() { elem = null.asInstanceOf[A] }
 
@@ -49,55 +47,24 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
     loop(self, 0)
   }
 
-  /** add <code>e</code> to the front of the list */
-  protected def prependElem(e: A): This = {
-    val n = makeEmpty
-    n.next = next
-    n.elem = elem
-    elem = e
+  /** append <code>n</code> to the end of the list */
+  def append(n: This): Unit = {
+    val last = lastElementNode
+    last.next = n
+  }
+
+  /** insert <code>n</code> immediately after this node */
+  def insert(n: This): Unit = {
+    n.append(self)
     next = n
-    self
   }
 
-  def +=(e: A): This = prependElem(e)
-
-  /** add <code>e</code> to the back of the list */
-  protected def appendNode(n: This): This = {
-    //TODO: the interaction between this and append just seems wrong...perhaps the appendNode method isn't needed?
-    val terminal = terminalNode
-    terminal.elem = n.elem
-    n.clearElem()
-    terminal.next = n
-    self
-  }
-
-  //TODO: this must be wrong...
-  def append(e: A) {
-    val n = makeEmpty
-    n.elem = e
-    appendNode(n)
-  }
-
-  protected def prependNodes(nodes: This): This = {
-    if (!nodes.isEmpty) {
-      val thisHead = head
-      val thisTail = tail
-      val otherHead = nodes.head
-      val otherTail = nodes.tail
-      val otherLastElement = nodes.lastElementNode
-      elem = otherHead
-      next = otherTail
-      nodes.elem = thisHead
-      nodes.next = thisTail
-      otherLastElement.next = nodes
-    }
-    self
-  }
-
+/*
   def ++=(elems: col.Sequence[A]): This = {
     val list = makeFromSequence(elems)
     prependNodes(list)
   }
+*/
 
   protected def pop(): This = {
     val resultNode = tail
@@ -166,27 +133,18 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
   override def head: A    = if (!isEmpty) elem else throw new NoSuchElementException("head of an empty list")
   override def tail: This = if (!isEmpty) next else throw new NoSuchElementException("list has no elements")
 
-  override def drop(n: Int): This = {
-    //TODO: this is essentially the same as in immutable.List
-    @tailrec
-    def loop(xs: This, at: Int): This = if (xs.isEmpty || at == n) xs else loop(xs.tail, at + 1)
-    loop(self, 0)
-  }
-  private def atLocation[T](n: Int)(f: This => T) = {
+  def update(n: Int, x: A) {
     val loc = drop(n)
-    if (!loc.isEmpty) f(loc)
-    else throw new IndexOutOfBoundsException(n.toString)
+    if (loc.isEmpty) throw new NoSuchElementException("list has less than " + n + " elements")
+    loc.elem = x
   }
-
-  override def apply(n: Int): A   = atLocation(n)(_.elem)
-  def update(n: Int, x: A): Unit  = atLocation(n)(_.elem = x)
 
   def get(n: Int): Option[A] = {
-    //TODO: this is probably the same as in immutable.List or at least could be
     val loc = drop(n)
     if (loc.isEmpty) None else Some(loc.elem)
   }
 
+/*
   override def iterator: Iterator[A] = new Iterator[A] {
     var elems = self
     def hasNext = elems.isEmpty
@@ -196,7 +154,8 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
       res
     }
   }
-
+*/
+/*
   override def foreach[B](f: A => B) {
     @tailrec
     def loop(xs: This): Unit = if (!xs.isEmpty) {
@@ -205,4 +164,5 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
     }
     loop(self)
   }
+*/
 }
