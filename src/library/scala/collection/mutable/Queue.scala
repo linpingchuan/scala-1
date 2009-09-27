@@ -36,6 +36,7 @@ class Queue[A] extends LinearSequence[A]
     builder ++= seq
     builder.result()
   }
+
   /** Adds all elements to the queue.
    *
    *  @param  elems       the elements to add.
@@ -87,7 +88,7 @@ object Queue extends SequenceFactory[Queue] {
     var back: Queue[A] = _
     clear() // initializes front and back
     def +=(elem: A): this.type = {
-      back.append(elem)
+      back += (elem)
       back = back.tail
       this
     }

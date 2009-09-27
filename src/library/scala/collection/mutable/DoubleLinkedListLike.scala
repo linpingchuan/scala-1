@@ -27,15 +27,46 @@ trait DoubleLinkedListLike[A, This >: Null <: DoubleLinkedListLike[A, This]] ext
   def prev: This = if (_prev ne null) _prev else throw new NoSuchElementException()
 
   override def append(that: This) {
-    val last = lastElementNode
-    last.next = that
-    that._prev = last
+    if (!that.isEmpty) {
+      if (isEmpty) {
+	elem = that.elem
+	next = that.next
+	next._prev = self
+      } else {
+	val last = lastElementNode
+	last.next = that
+	that._prev = last
+      }
+    }
   }
 
   override def insert(that: This) {
-    next._prev = that
-    super.insert(that)
-    that._prev = self
+    if (!that.isEmpty) {
+      next._prev = that
+      super.insert(that)
+      that._prev = self
+    }
+  }
+
+  override def head_=(e: A) {
+    if (isEmpty) {
+      next = makeEmpty
+      _prev = makeEmpty
+    }
+    elem = e
+  }
+  override def tail_=(that: This) {
+    if (isEmpty) throw new NoSuchElementException("cannot set the tail of an empty list")
+    if (that eq null) throw new NullPointerException("tail cannot be null, use an empty list instead")
+    if (!next.isEmpty) {
+      next.prev = makeEmpty
+      next.prev.next = next
+    }
+    next = that
+    that.prev = self
+  }
+  def prev_=(that: This) {
+    
   }
 
   def remove() {
@@ -44,6 +75,6 @@ trait DoubleLinkedListLike[A, This >: Null <: DoubleLinkedListLike[A, This]] ext
     if (_prev ne null)
       _prev.next = next
     _prev = null
-    next = null
+    next = makeEmpty
   }
 }

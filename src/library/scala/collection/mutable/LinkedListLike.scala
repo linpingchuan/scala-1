@@ -32,7 +32,7 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
   protected var elem: A = _
   protected var next: This = _
 
-  private def clearElem() { elem = null.asInstanceOf[A] }
+  protected def clearElem() { elem = null.asInstanceOf[A] }
 
   protected def makeEmpty: This
   protected def makeFromSequence(seq: col.Sequence[A]): This
@@ -48,23 +48,45 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
   }
 
   /** append <code>that</code> to the end of the list */
-  def append(that: This): Unit = {
-    val last = lastElementNode
-    last.next = that
+  def append(that: This) {
+    if (!that.isEmpty) {
+      if (isEmpty) {
+	elem = that.elem
+	next = that.next
+      } else {
+	val last = lastElementNode
+	last.next = that
+      }
+    }
   }
 
   /** insert <code>that</code> immediately after this node */
-  def insert(that: This): Unit = {
-    that.append(next)
-    next = that
+  def insert(that: This) {
+    if (!that.isEmpty) {
+      that.append(next)
+      next = that
+    }
   }
 
-/*
+  def +=(elem: A): This = {
+    val node = makeEmpty
+    node.elem = elem
+    append(node)
+    self
+  }
+
+
   def ++=(elems: col.Sequence[A]): This = {
     val list = makeFromSequence(elems)
-    prependNodes(list)
+    append(list)
+    self
   }
-*/
+
+  def clear() {
+    next = null
+    clearElem()
+  }
+
 
   protected def pop(): This = {
     val resultNode = tail
@@ -130,9 +152,21 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
     loop(self)
   }
 
-  override def head: A    = if (!isEmpty) elem else throw new NoSuchElementException("head of an empty list")
-  override def tail: This = if (!isEmpty) next else throw new NoSuchElementException("list has no elements")
-
+  def head: A    = if (!isEmpty) elem else throw new NoSuchElementException("head of an empty list")
+  def head_=(e: A) {
+    if (isEmpty) next = makeEmpty
+    elem = e
+  }
+  def tail: This = if (!isEmpty) next else throw new NoSuchElementException("list has no elements")
+  /** change <code>tail</code> to <code>that</code>
+   *  @throws NoSuchElementException if this list is empty
+   *  @throws NullPointerException if that is null
+   */
+  def tail_=(that: This) {
+    if (isEmpty) throw new NoSuchElementException("cannot set tail of an empty list")
+    if (that eq null) throw new NullPointerException("tail cannot be null, use an empty list instead")
+    next = that
+  }
   def update(n: Int, x: A) {
     val loc = drop(n)
     if (loc.isEmpty) throw new NoSuchElementException("list has less than " + n + " elements")
