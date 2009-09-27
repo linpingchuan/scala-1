@@ -23,9 +23,14 @@ import generic._
  *  @since   1
  */
 @serializable @SerialVersionUID(419155950203746706L)
-class DoubleLinkedList[A](_elem: A, _next: DoubleLinkedList[A]) extends LinearSequence[A]
-                                                                   with GenericTraversableTemplate[A, DoubleLinkedList]
-                                                                   with DoubleLinkedListLike[A, DoubleLinkedList[A]] {
+class DoubleLinkedList[A] protected () extends LinearSequence[A]
+                                          with GenericTraversableTemplate[A, DoubleLinkedList]
+                                          with DoubleLinkedListLike[A, DoubleLinkedList[A]] {
+  def this(v: A) {
+    this()
+    elem = v
+    next = makeEmpty
+  }
   override def companion: GenericCompanion[DoubleLinkedList] = DoubleLinkedList
   override protected def makeEmpty = new DoubleLinkedList[A]
 }
@@ -36,7 +41,7 @@ object DoubleLinkedList extends SequenceFactory[DoubleLinkedList] {
   def newBuilder[A]: Builder[A, DoubleLinkedList[A]] = new Builder[A, DoubleLinkedList[A]] {
     var current = new DoubleLinkedList[A]
     def +=(elem: A): this.type = {
-      current.append(elem)
+      current.append(new DoubleLinkedList(elem))
       this
     }
     def clear() { current = new DoubleLinkedList[A] }

@@ -47,16 +47,16 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
     loop(self, 0)
   }
 
-  /** append <code>n</code> to the end of the list */
-  def append(n: This): Unit = {
+  /** append <code>that</code> to the end of the list */
+  def append(that: This): Unit = {
     val last = lastElementNode
-    last.next = n
+    last.next = that
   }
 
-  /** insert <code>n</code> immediately after this node */
-  def insert(n: This): Unit = {
-    n.append(self)
-    next = n
+  /** insert <code>that</code> immediately after this node */
+  def insert(that: This): Unit = {
+    that.append(next)
+    next = that
   }
 
 /*

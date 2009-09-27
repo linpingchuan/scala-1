@@ -23,26 +23,27 @@ package scala.collection.mutable
 trait DoubleLinkedListLike[A, This >: Null <: DoubleLinkedListLike[A, This]] extends LinkedListLike[A, This] {
   self: This =>
 
-  protected var prev: This = _
+  protected var _prev: This = _
+  def prev: This = if (_prev ne null) _prev else throw new NoSuchElementException()
 
-  override def appendNode(n: This): This = {
-    super.appendNode(n)
-    
-    self
+  override def append(that: This) {
+    val last = lastElementNode
+    last.next = that
+    that._prev = last
   }
 
-  override def insert(that: This): Unit = if (that ne null) {
-    that.append(next)
-    next = that
-    that.prev = repr
+  override def insert(that: This) {
+    next._prev = that
+    super.insert(that)
+    that._prev = self
   }
 
   def remove() {
     if (next ne null)
-      next.prev = prev
-    if (prev ne null)
-      prev.next = next
-    prev = null
+      next._prev = _prev
+    if (_prev ne null)
+      _prev.next = next
+    _prev = null
     next = null
   }
 }
