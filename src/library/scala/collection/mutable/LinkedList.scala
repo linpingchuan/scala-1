@@ -47,13 +47,19 @@ object LinkedList extends SequenceFactory[LinkedList] {
     var back: LinkedList[A] = _
     clear() // initializes front and back
     def +=(elem: A): this.type = {
-      back.append(elem)
-      back = back.tail
+      if (front eq null) {
+	front = new LinkedList(elem)
+	back = front
+      } else {
+	val n = new LinkedList(elem)
+	back.append(n)
+	back = n
+      }
       this
     }
     def clear() {
-      front = new LinkedList[A]
-      back = front
+      front = null
+      back = null
     }
     def result() = front
   }
