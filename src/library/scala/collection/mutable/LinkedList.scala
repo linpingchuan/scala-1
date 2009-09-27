@@ -24,7 +24,8 @@ import scala.{ collection => col }
 @serializable
 class LinkedList[A] extends LinearSequence[A] 
                     with GenericTraversableTemplate[A, LinkedList]
-                    with LinkedListLike[A, LinkedList[A]] {
+                    with LinkedListLike[A, LinkedList[A]] 
+		    with LinearSequenceLike[A, LinkedList[A]]{
   def this(v: A) {
    this()
    elem = v
