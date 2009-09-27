@@ -35,7 +35,7 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
   def elem_=(e: A): Unit = _elem = e
   protected var _next: This = _
   @deprecated("use tail instead")
-  def next: This
+  def next: This = _next
   @deprecated("assign to tail instead")
   def next_=(that: This): Unit = _next = that
 
@@ -93,13 +93,13 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
     val resultNode = tail
     val resultVal = head
     if (tail.isEmpty) {
-      elem = null.asInstanceOf[A]
-      next = null
+      _elem = null.asInstanceOf[A]
+      _next = null
     } else {
-      elem = tail.head
-      next = tail.tail
+      _elem = tail.head
+      _next = tail.tail
     }
-    resultNode.elem = resultVal
+    resultNode._elem = resultVal
     resultNode
   }
 
@@ -139,12 +139,12 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
     loop(self)
   }
 
-  def head: A    = if (!isEmpty) elem else throw new NoSuchElementException("head of an empty list")
+  override def head: A = if (!isEmpty) _elem else throw new NoSuchElementException("head of an empty list")
   def head_=(e: A) {
     if (isEmpty) next = makeEmpty
     elem = e
   }
-  def tail: This = if (!isEmpty) next else throw new NoSuchElementException("list has no elements")
+  override def tail: This = if (!isEmpty) _next else throw new NoSuchElementException("list has no elements")
 
   def tail_=(that: This) {
     if (isEmpty) throw new NoSuchElementException("cannot set tail of an empty list")
@@ -154,11 +154,11 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
   def update(n: Int, x: A) {
     val loc = drop(n)
     if (loc.isEmpty) throw new NoSuchElementException("list has less than " + n + " elements")
-    loc.elem = x
+    loc._elem = x
   }
 
   def get(n: Int): Option[A] = {
     val loc = drop(n)
-    if (loc.isEmpty) None else Some(loc.elem)
+    if (loc.isEmpty) None else Some(loc._elem)
   }
 }

@@ -24,7 +24,7 @@ import scala.{ collection => col }
  *  @since   1
  */
 @serializable @cloneable
-class Queue[A] extends LinearSequence[A] 
+class Queue[A] extends Sequence[A] 
                   with GenericTraversableTemplate[A, Queue]
                   with LinkedListLike[A, Queue[A]]
                   with Cloneable[Queue[A]] {
@@ -69,7 +69,7 @@ class Queue[A] extends LinearSequence[A]
    *  @return    a sequence of all elements in the queue for which
    *             p yields true.
    */
-  def dequeueAll(p: A => Boolean): Sequence[A] = removeAll(p)
+  def dequeueAll(p: A => Boolean): Queue[A] = removeAll(p)
 
 
 

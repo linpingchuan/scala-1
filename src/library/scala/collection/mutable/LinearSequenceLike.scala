@@ -53,7 +53,7 @@ trait LinearSequenceLike[A, This >: Null <: LinearSequenceLike[A, This]] extends
    *  terminal node to be found more quickly, it should override this
    *  method.
    */
-  protected def terminalNode: This = lastElementNode.tail
+  protected def terminalNode: This
   /**
    * @return the last non-terminal node in the list
    * @throws NoSuchElementException if this list is empty
