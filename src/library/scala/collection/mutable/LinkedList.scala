@@ -9,8 +9,7 @@
 // $Id$
 
 
-package scala.collection
-package mutable
+package scala.collection.mutable
 
 import scala.collection.generic.{ GenericTraversableTemplate, SequenceFactory, GenericCompanion, BuilderFactory }
 import scala.{ collection => col }
@@ -21,13 +20,17 @@ import scala.{ collection => col }
  *  @author Matthias Zenger
  *  @author Martin Odersky
  *  @version 2.8
- *  @since   1
  */
 @serializable
-class LinkedList[A] extends LinearSequence[A] 
-                       with GenericTraversableTemplate[A, LinkedList]
-                       with LinkedListLike[A, LinkedList[A]] {
-  protected def makeEmpty = new LinkedList[A]
+class LinkedList[A] protected () extends LinearSequence[A] 
+                          with GenericTraversableTemplate[A, LinkedList]
+                          with LinkedListLike[A, LinkedList[A]] {
+  def this(v: A) {
+   this()
+   elem = v
+   next = makeEmpty
+  }
+  protected def makeEmpty = new LinkedList[A]()
 
   protected def makeFromSequence(seq: col.Sequence[A]) = {
     val builder = LinkedList.newBuilder[A]
