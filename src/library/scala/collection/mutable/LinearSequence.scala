@@ -16,14 +16,14 @@ import scala.collection
 
 
 /** A subtrait of <code>collection.Sequence</code> which represents sequences
- *  that cannot be mutated.
+ *  that can be mutated.
  *
  *  @since 2.8
  */
 trait LinearSequence[A] extends Sequence[A] 
                            with scala.collection.LinearSequence[A] 
                            with generic.GenericTraversableTemplate[A, LinearSequence]
-                           with LinearSequenceLike[A, LinearSequence[A]] {
+                           /*with LinearSequenceLike[A, LinearSequence[A]]*/ {  // variance problem created if inherits from LinearSequenceLike
   override def companion: generic.GenericCompanion[LinearSequence] = LinearSequence
 }
 
