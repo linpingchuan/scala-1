@@ -12,7 +12,6 @@
 package scala.collection
 package mutable
 
-import scala.collection.{ LinearSequenceLike, TraversableLike }
 import annotation.tailrec
 import scala.{ collection => col }
 
@@ -29,23 +28,25 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
       extends LinearSequenceLike[A, This] {
   self: This =>
   
-  protected var elem: A = _
-  protected var next: This = _
+  protected var _elem: A = _
+  @deprecated("use head instead")
+  def elem = _elem
+  @deprecated("assign to head instead")
+  def elem_=(e: A): Unit = _elem = e
+  protected var _next: This = _
+  @deprecated("use tail instead")
+  def next: This
+  @deprecated("assign to tail instead")
+  def next_=(that: This): Unit = _next = that
 
-  protected def clearElem() { elem = null.asInstanceOf[A] }
+  protected def clearElem() { _elem = null.asInstanceOf[A] }
 
   protected def makeEmpty: This
-  protected def makeFromSequence(seq: col.Sequence[A]): This
+  protected def makeFromTraversable(seq: col.Traversable[A]): This
   //TODO: why can't I have concrete implementations???
   //protected def newBuilder: Builder[A, This]
 
   override def isEmpty = next eq null
-
-  override def length: Int = {
-    @tailrec
-    def loop(x: This, cnt: Int): Int = if (x.isEmpty) cnt else loop(x.next, cnt + 1)
-    loop(self, 0)
-  }
 
   /** append <code>that</code> to the end of the list */
   def append(that: This) {
@@ -76,8 +77,8 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
   }
 
 
-  def ++=(elems: col.Sequence[A]): This = {
-    val list = makeFromSequence(elems)
+  def ++=(elems: col.Traversable[A]): This = {
+    val list = makeFromTraversable(elems)
     append(list)
     self
   }
@@ -126,26 +127,12 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
   }
   
 
-  /** obtain the current terminal node for this list
-   *  the terminal node is a nil list and does not have a head or a tail,
-   *  and will throw <code>NoSuchElementException</code> if you try to
-   *  access the head or the tail.
-   *
-   *  This method is linear with respect to the length of the list.  If
-   *  an implementing class adds additional structure that allows the
-   *  terminal node to be found more quickly, it should override this
-   *  method.
-   */
   protected def terminalNode: This = {
     @tailrec
     def loop(xs: This): This = if (isEmpty) xs else loop(xs.tail)
     loop(self)
   }
 
-  /**
-   * @return the last non-terminal node in the list
-   * @throws NoSuchElementException if this list is empty
-   */
   protected def lastElementNode: This = {
     @tailrec
     def loop(xs: This): This = if (xs.tail.isEmpty) xs else loop(xs.tail)
@@ -158,10 +145,7 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
     elem = e
   }
   def tail: This = if (!isEmpty) next else throw new NoSuchElementException("list has no elements")
-  /** change <code>tail</code> to <code>that</code>
-   *  @throws NoSuchElementException if this list is empty
-   *  @throws NullPointerException if that is null
-   */
+
   def tail_=(that: This) {
     if (isEmpty) throw new NoSuchElementException("cannot set tail of an empty list")
     if (that eq null) throw new NullPointerException("tail cannot be null, use an empty list instead")
@@ -177,26 +161,4 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
     val loc = drop(n)
     if (loc.isEmpty) None else Some(loc.elem)
   }
-
-/*
-  override def iterator: Iterator[A] = new Iterator[A] {
-    var elems = self
-    def hasNext = elems.isEmpty
-    def next = {
-      val res = elems.head
-      elems = elems.tail
-      res
-    }
-  }
-*/
-/*
-  override def foreach[B](f: A => B) {
-    @tailrec
-    def loop(xs: This): Unit = if (!xs.isEmpty) {
-      f(xs.head)
-      loop(xs.tail)
-    }
-    loop(self)
-  }
-*/
 }

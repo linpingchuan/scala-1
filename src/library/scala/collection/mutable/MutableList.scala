@@ -87,7 +87,7 @@ class MutableList[A] extends LinearSequence[A]
     if (len == 0)
       prependElem(elem)
     else {
-      last0.append(elem)
+      last0 += elem
       last0 = last0.tail
       len = len + 1
     }

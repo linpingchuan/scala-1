@@ -31,7 +31,7 @@ class Queue[A] extends LinearSequence[A]
 
   override def companion = Queue
   protected def makeEmpty = new Queue[A]
-  protected def makeFromSequence(seq: col.Sequence[A]) = {
+  protected def makeFromTraversable(seq: col.Traversable[A]) = {
     val builder = companion.newBuilder[A]
     builder ++= seq
     builder.result()

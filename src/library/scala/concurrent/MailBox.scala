@@ -146,11 +146,11 @@ trait LinkedListQueueCreator {
   def queueCreate[A >: Null <: AnyRef]: QueueModule[A] = new QueueModule[A] {
     type T = (LinkedList[A], LinkedList[A]) // fst = the list, snd = last elem
     def make: T = {
-      val l = new LinkedList[A](null, null)
+      val l = new LinkedList[A]()
       (l, l)
     }
     def append(l: T, x: A): T = {
-      val atTail = new LinkedList(x, null)
+      val atTail = new LinkedList(x)
       l._2 append atTail;
       (l._1, atTail)
     }

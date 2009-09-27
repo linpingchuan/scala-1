@@ -1,0 +1,3 @@
+build/
+dists/
+test/files/*/*.log

@@ -32,7 +32,7 @@ class LinkedList[A] extends LinearSequence[A]
   }
   protected def makeEmpty = new LinkedList[A]()
 
-  protected def makeFromSequence(seq: col.Sequence[A]) = {
+  protected def makeFromTraversable(seq: col.Traversable[A]) = {
     val builder = LinkedList.newBuilder[A]
     builder ++= seq
     builder.result()

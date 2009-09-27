@@ -62,10 +62,11 @@ trait QueueProxy[A] extends Queue[A] with Proxy {
    *
    *  @param  iter        an iterator
    */
-  override def ++=(it: Iterator[A]): this.type = {
-    self ++= it
-    this
-  }
+//ERE: Is this really needed?
+//  override def ++=(it: Iterator[A]): this.type = {
+//    self ++= it
+//    this
+//  }
 
   /** Adds all elements to the queue.
    *

@@ -182,7 +182,7 @@ class PriorityQueue[A](implicit ord: Ordering[A])
 
   /** Returns a regular queue containing the same elements.
    */
-  def toQueue: Queue[A] = new Queue[A] ++= this.iterator
+  def toQueue: Queue[A] = new Queue[A] ++= this
 
   /** Returns a textual representation of a queue as a string.
    *
@@ -195,5 +195,5 @@ class PriorityQueue[A](implicit ord: Ordering[A])
    *
    *  @return  a priority queue with the same elements.
    */
-  override def clone(): PriorityQueue[A] = new PriorityQueue[A] ++= this.iterator
+  override def clone(): PriorityQueue[A] = new PriorityQueue[A] ++= this
 }

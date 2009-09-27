@@ -34,7 +34,7 @@ class SynchronizedQueue[A] extends Queue[A] {
    *
    *  @param  elem        the element to insert
    */
-  override def +=(elem: A): this.type = synchronized[this.type] { super.+=(elem) }
+  override def +=(elem: A): this.type = synchronized[this.type] { super.+=(elem); this }
 
   /** Adds all elements provided by an <code>Iterable</code> object
    *  at the end of the queue. The elements are prepended in the order they
@@ -42,7 +42,7 @@ class SynchronizedQueue[A] extends Queue[A] {
    *
    *  @param  iter        an iterable object
    */
-  override def ++=(iter: Traversable[A]): this.type = synchronized[this.type] { super.++=(iter) }
+  override def ++=(iter: Traversable[A]): this.type = synchronized[this.type] { super.++=(iter); this }
 
   /** Adds all elements provided by an iterator
    *  at the end of the queue. The elements are prepended in the order they
@@ -50,7 +50,8 @@ class SynchronizedQueue[A] extends Queue[A] {
    *
    *  @param  it        an iterator
    */
-  override def ++=(it: Iterator[A]): this.type = synchronized[this.type] { super.++=(it) }
+
+//  override def ++=(it: Iterator[A]): this.type = synchronized[this.type] { super.++=(it) }
 
   /** Adds all elements to the queue.
    *
