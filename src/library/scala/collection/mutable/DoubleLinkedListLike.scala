@@ -20,53 +20,81 @@ package scala.collection.mutable
  *  @version 1.0, 08/07/2003
  *  @since   2.8
  */
-trait DoubleLinkedListLike[A, This >: Null <: DoubleLinkedListLike[A, This]] extends LinkedListLike[A, This] {
+trait DoubleLinkedListLike[A, This >: Null <: DoubleLinkedListLike[A, This]] extends LinearSequenceLike[A, This] {
   self: This =>
+
+  protected def clearElem() { _elem = null.asInstanceOf[A] }
 
   protected var _prev: This = _
   def prev: This = if (_prev ne null) _prev else throw new NoSuchElementException()
 
-  override def append(that: This) {
+  def append(that: This) {
     if (!that.isEmpty) {
       if (isEmpty) {
-	elem = that.elem
-	next = that.next
+	elem = that._elem
+	next = that._next
 	next._prev = self
       } else {
 	val last = lastElementNode
-	last.next = that
+	last._next = that
 	that._prev = last
       }
     }
   }
 
-  override def insert(that: This) {
+  def insert(that: This) {
     if (!that.isEmpty) {
-      next._prev = that
-      super.insert(that)
+      _next._prev = that
+      that.append(_next)
+      _next = that
       that._prev = self
     }
   }
 
-  override def head_=(e: A) {
+  def head_=(e: A) {
     if (isEmpty) {
-      next = makeEmpty
+      _next = makeEmpty
       _prev = makeEmpty
     }
-    elem = e
+    _elem = e
   }
   override def tail_=(that: This) {
     if (isEmpty) throw new NoSuchElementException("cannot set the tail of an empty list")
     if (that eq null) throw new NullPointerException("tail cannot be null, use an empty list instead")
     if (!next.isEmpty) {
-      next.prev = makeEmpty
-      next.prev.next = next
+      next._prev = makeEmpty
+      next._prev._next = _next
     }
-    next = that
-    that.prev = self
+    _next = that
+    that._prev = self
   }
   def prev_=(that: This) {
-    
+    if (that eq null) throw new NullPointerException("prev cannot be set to null")
+    if (!_prev.isEmpty) {
+      _prev._next = makeEmpty
+      _prev._next._prev = _prev
+    }
+    _prev = that
+    that._next = self
+  }
+
+  def clear() {
+    if (!isEmpty) {
+      if (!_prev.isEmpty) {
+	_prev._next = makeEmpty
+	_prev._next._prev = _prev
+      } else {
+	_prev._next = null
+      }
+      _prev = null
+      if (!_next.isEmpty) {
+	_next._prev = makeEmpty
+	_next._prev._next = _next
+      } else {
+	_next._prev = null
+      }
+      _next = null
+    }
   }
 
   def remove() {

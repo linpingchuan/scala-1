@@ -25,6 +25,7 @@ import scala.{ collection => col }
  */
 @serializable @cloneable
 class Queue[A] extends Sequence[A] 
+                  with col.LinearSequence[A]
                   with GenericTraversableTemplate[A, Queue]
                   with LinkedListLike[A, Queue[A]]
                   with Cloneable[Queue[A]] {

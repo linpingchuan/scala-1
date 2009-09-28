@@ -9,10 +9,10 @@
 // $Id$
 
 
-package scala.collection
-package mutable
+package scala.collection.mutable
 
-import generic._
+import scala.collection.generic
+import scala.collection
 
 /** This class implements single linked lists where both the head (<code>elem</code>)
  *  and the tail (<code>next</code>) are mutable.
@@ -23,24 +23,35 @@ import generic._
  *  @since   1
  */
 @serializable @SerialVersionUID(419155950203746706L)
-class DoubleLinkedList[A] (var next: DoubleLinkedList[A], var _prev: DoubleLinkedList[A]) 
-  extends LinearSequence[A]
-     with GenericTraversableTemplate[A, DoubleLinkedList]
-     with DoubleLinkedListLike[A, DoubleLinkedList[A]] {
-  def this() = this(null, null)
+class DoubleLinkedList[A] extends Sequence[A]
+                             with collection.LinearSequence[A]
+                             with generic.GenericTraversableTemplate[A, DoubleLinkedList]
+                             with DoubleLinkedListLike[A, DoubleLinkedList[A]] { self =>
+  def this(next: DoubleLinkedList[A], prev: DoubleLinkedList[A]) {
+    this()
+    _next = next
+    _prev = prev
+  }
   def this(v: A) {
     this()
-    elem = v
-    next = makeEmpty
+    _elem = v
+    _next = makeEmpty
+    _next._prev = self
     _prev = makeEmpty
+    _prev._next = self
   }
-  override def companion: GenericCompanion[DoubleLinkedList] = DoubleLinkedList
+  override def companion: generic.GenericCompanion[DoubleLinkedList] = DoubleLinkedList
   override protected def makeEmpty = new DoubleLinkedList[A]
+
+  protected def makeFromTraversable(seq: collection.Traversable[A]) = {
+    val builder = DoubleLinkedList.newBuilder[A]
+    builder ++= seq
+    builder.result()
+  }
 }
 
-object DoubleLinkedList extends SequenceFactory[DoubleLinkedList] {
-  implicit def builderFactory[A]: BuilderFactory[A, DoubleLinkedList[A], Coll] = //new BuilderFactory[A, DoubleLinkedList[A], Coll] { def apply(from: Coll) = from.traversableBuilder[A] }
-    new VirtualBuilderFactory[A]
+object DoubleLinkedList extends generic.SequenceFactory[DoubleLinkedList] {
+  implicit def builderFactory[A]: generic.BuilderFactory[A, DoubleLinkedList[A], Coll] = new VirtualBuilderFactory[A]
   def newBuilder[A]: Builder[A, DoubleLinkedList[A]] = new Builder[A, DoubleLinkedList[A]] {
     var current = new DoubleLinkedList[A]
     def +=(elem: A): this.type = {
