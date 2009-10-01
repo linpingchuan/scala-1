@@ -45,12 +45,12 @@ trait LinearSequenceLike[A, This >: Null <: LinearSequenceLike[A, This]] extends
   def append(that: This): Unit
   def insert(that: This): Unit
   def clear(): Unit
-  def +=(elem: A): This = {
+  def +=(elem: A): This /* = {
     val node = makeEmpty
-    node.elem = elem
+    node._elem = elem
     append(node)
     self
-  }
+  }*/
   def ++=(elems: col.Traversable[A]): This = {
     val list = makeFromTraversable(elems)
     append(list)

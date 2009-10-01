@@ -40,13 +40,27 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
   def append(that: This) {
     if (!that.isEmpty) {
       if (isEmpty) {
-	elem = that.elem
-	next = that.next
+	_elem = that._elem
+	_next = that._next
       } else {
 	val last = lastElementNode
-	last.next = that
+	last._next = that
       }
     }
+  }
+
+  def +=(e: A): This = {
+    if (isEmpty) {
+      _elem = e
+      _next = makeEmpty
+    } else {
+      val node = makeEmpty
+      node._elem = e
+      val last = lastElementNode
+      node._next = last._next
+      last._next = node
+    }
+    self
   }
 
   /** insert <code>that</code> immediately after this node */

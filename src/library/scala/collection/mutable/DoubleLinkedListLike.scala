@@ -25,21 +25,41 @@ trait DoubleLinkedListLike[A, This >: Null <: DoubleLinkedListLike[A, This]] ext
 
   protected def clearElem() { _elem = null.asInstanceOf[A] }
 
+  override def isEmpty = (_next eq null) || (_prev eq null)
+
   protected var _prev: This = _
   def prev: This = if (_prev ne null) _prev else throw new NoSuchElementException()
 
   def append(that: This) {
     if (!that.isEmpty) {
       if (isEmpty) {
-	elem = that._elem
-	next = that._next
-	next._prev = self
+	_elem = that._elem
+	_next = that._next
+	_next._prev = self
       } else {
 	val last = lastElementNode
 	last._next = that
 	that._prev = last
       }
     }
+  }
+
+  def +=(e: A): This = {
+    if (isEmpty) {
+      _next = makeEmpty
+      _next._prev = self
+      _prev = makeEmpty
+      _prev._next = self
+      _elem = e
+    } else {
+      val last = lastElementNode
+      val node = makeEmpty
+      last._next._prev = node
+      node._next = last._next
+      last._next = node
+      node._prev = last
+    }
+    self
   }
 
   def insert(that: This) {
