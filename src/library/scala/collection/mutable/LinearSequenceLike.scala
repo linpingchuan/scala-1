@@ -31,12 +31,12 @@ trait LinearSequenceLike[A, This >: Null <: LinearSequenceLike[A, This]] extends
   /**
    * @throws NoSuchElementException if the list is empty 
    */ 
-  def head: A
+  override def head: A = if (isEmpty) throw new NoSuchElementException else _elem
   def head_=(e: A): Unit
   /**
    * @throws NoSuchElementException if the list is empty
    */
-  def tail: This
+  override def tail: This = if (isEmpty) throw new NoSuchElementException else _next
   /** change <code>tail</code> to <code>that</code>
    *  @throws NoSuchElementException if this list is empty
    *  @throws NullPointerException if that is null

@@ -114,12 +114,10 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
     result
   }
 
-  override def head: A = if (!isEmpty) _elem else throw new NoSuchElementException("head of an empty list")
   def head_=(e: A) {
-    if (isEmpty) next = makeEmpty
+    if (isEmpty) next = makeEmpty // if list is currently empty need to add a sentinel node
     elem = e
   }
-  override def tail: This = if (!isEmpty) _next else throw new NoSuchElementException("list has no elements")
 
   def tail_=(that: This) {
     if (isEmpty) throw new NoSuchElementException("cannot set tail of an empty list")
