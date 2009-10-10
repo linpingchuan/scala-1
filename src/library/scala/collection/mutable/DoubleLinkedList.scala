@@ -55,7 +55,7 @@ object DoubleLinkedList extends generic.SequenceFactory[DoubleLinkedList] {
   def newBuilder[A]: Builder[A, DoubleLinkedList[A]] = new Builder[A, DoubleLinkedList[A]] {
     var current = new DoubleLinkedList[A]
     def +=(elem: A): this.type = {
-      current.append(new DoubleLinkedList(elem))
+      current += elem //this will be really slow
       this
     }
     def clear() { current = new DoubleLinkedList[A] }
