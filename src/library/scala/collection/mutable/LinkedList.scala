@@ -22,7 +22,8 @@ import scala.{ collection => col }
  *  @version 2.8
  */
 @serializable
-class LinkedList[A] extends Sequence[A]                       
+class LinkedList[A] extends Sequence[A]
+                       with col.LinearSequence[A]
                        with GenericTraversableTemplate[A, LinkedList]
                        with LinkedListLike[A, LinkedList[A]]  {
   def this(v: A) {
