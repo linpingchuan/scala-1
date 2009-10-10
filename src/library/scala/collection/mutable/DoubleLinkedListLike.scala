@@ -54,6 +54,7 @@ trait DoubleLinkedListLike[A, This >: Null <: DoubleLinkedListLike[A, This]] ext
     } else {
       val last = lastElementNode
       val node = makeEmpty
+      node._elem = e
       last._next._prev = node
       node._next = last._next
       last._next = node
