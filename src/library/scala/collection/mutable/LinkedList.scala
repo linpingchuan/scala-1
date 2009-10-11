@@ -43,6 +43,8 @@ class LinkedList[A] extends Sequence[A]
 
 object LinkedList extends SequenceFactory[LinkedList] {
   implicit def builderFactory[A]: BuilderFactory[A, LinkedList[A], Coll] = new VirtualBuilderFactory[A]
+  
+  //override def empty[A] = new LinkedList[A]
   def newBuilder[A] = new Builder[A, LinkedList[A]] {
     var front: LinkedList[A] = _
     var back: LinkedList[A] = _
@@ -62,6 +64,6 @@ object LinkedList extends SequenceFactory[LinkedList] {
       front = null
       back = null
     }
-    def result() = front
+    def result() = if (front ne null) front else new LinkedList[A]
   }
 }
