@@ -51,13 +51,13 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
     println("\tTesting inserts: " + testName)
     val list = Factory[Int]()
     list += 1
-    check("list == List(1) =", list == singular, true)
+    check("list == List(1) =", list, singular)
     list += 2
-    check("list == " + double, list == double, true)
+    check("list == " + double, list, double)
     list += 3
-    check("list == " + triple, list == triple, true)
+    check("list == " + triple, list, triple)
     list += 4
-    check("list == " + baseList, list == baseList, true)
+    check("list == " + baseList, list, baseList)
   }
   def testMakeFromSeq() {
     println("\tTesting making from a sequence: " + testName)
@@ -74,44 +74,44 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
     check("a ++= Nil => a.isEmpty", a.isEmpty, true)
     val b = Factory(1, 2, 3, 4)
     b ++= Nil
-    check("b ++= Nil => b == " + baseList, b == baseList, true)
+    check("b ++= Nil => b == " + baseList, b, baseList)
     val c = Factory(1, 2, 3, 4)
     c ++= baseList
-    check("c ++= " + baseList + " => c == " + baseList, c == doubledList, true)
+    check("c ++= " + baseList + " => c == " + baseList, c, doubledList)
     val d = Factory(1)
     d ++= List(2)
-    check("d ++= List(2), d == " + double, d == double, true)
+    check("d ++= List(2), d == " + double, d, double)
   }
   def testAppend() {
     println("\tTesting appending a list of same type: " + testName)
     val a = Factory(1, 2, 3, 4)
     val b = Factory(1, 2, 3, 4)
     a.append(b)
-    check("a.append(b) => a == " + doubledList, a == doubledList, true)
+    check("a.append(b) => a == " + doubledList, a, doubledList)
     val e = Factory.empty[Int]
     val c = Factory(1, 2, 3, 4)
     e.append(c)
-    check("e.append(c) => e == " + baseList, e == baseList, true)
+    check("e.append(c) => e == " + baseList, e, baseList)
     val e2 = Factory.empty[Int]
     val d = Factory(1, 2, 3, 4)
     d.append(e2)
-    check("d.append(e2) => d == " + baseList, d == baseList, true)
+    check("d.append(e2) => d == " + baseList, d, baseList)
   }
   def testInsert() {
     println("\tTesting insert: " + testName)
     val e = Factory.empty[Int]
     val a = Factory(1, 2, 3, 4)
     e.insert(a)
-    check("e.insert(a) => e == " + baseList, e == baseList, true)
+    check("e.insert(a) => e == " + baseList, e, baseList)
     val b = Factory(1, 2, 3, 4)
     val e2 = Factory.empty[Int]
     b.insert(e2)
-    check("b.insert(e2) => b == " + baseList, b == baseList, true)
+    check("b.insert(e2) => b == " + baseList, b, baseList)
     val c = Factory(1, 2, 3, 4)
     val d = Factory(1, 2, 3, 4)
     c.insert(d)
     val r = List(1, 1, 2, 3, 4, 2, 3, 4)
-    check("c.insert(d) => c == " + r, c == r, true)
+    check("c.insert(d) => c == " + r, c, r)
   }
   def testAssignHead() {
     println("\tTesting assignments to head: " + testName)
