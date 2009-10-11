@@ -15,15 +15,15 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
   def check[R](label: String, op: => R, expected: R) {
     val result = op
     val correctness = if (result == expected) "CORRECT" else "INCORRECT, should equal " + expected
-    println("\t\t" + label + " " + result + " " + correctness)
+    println("\t\t" + label + " == " + result + " " + correctness)
   }
   def testEmpty() {
     println("\tTesting empty: " + testName)
     val a = Factory.empty[Int]
-    check("isEmpty =", a.isEmpty, true)
-    check("length =", a.length, 0)
+    check("isEmpty", a.isEmpty, true)
+    check("length", a.length, 0)
     val b = Factory[Int]()
-    check("a == b =", a == b, true)
+    check("a == b", a == b, true)
     try {
       a.head
       println("\t\ta.head should have thrown a NoSuchElementException")
@@ -42,22 +42,22 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
   def testSingular() {
     println("\tTesting singular: " + testName)
     val a = Factory(1)
-    check("isEmpty =", a.isEmpty, false)
-    check("length =", a.length, 1)
-    check("head =", a.head, 1)
-    check("tail.isEmpty =", a.tail.isEmpty, true) 
+    check("a.isEmpty", a.isEmpty, false)
+    check("a.length", a.length, 1)
+    check("a.head", a.head, 1)
+    check("a.tail.isEmpty", a.tail.isEmpty, true) 
   }
   def testInserts() {
     println("\tTesting inserts: " + testName)
     val list = Factory[Int]()
     list += 1
-    check("list == List(1) =", list, singular)
+    check("list", list, singular)
     list += 2
-    check("list == " + double, list, double)
+    check("list" + double, list, double)
     list += 3
-    check("list == " + triple, list, triple)
+    check("list" + triple, list, triple)
     list += 4
-    check("list == " + baseList, list, baseList)
+    check("list" + baseList, list, baseList)
   }
   def testMakeFromSeq() {
     println("\tTesting making from a sequence: " + testName)
@@ -74,57 +74,57 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
     check("a ++= Nil => a.isEmpty", a.isEmpty, true)
     val b = Factory(1, 2, 3, 4)
     b ++= Nil
-    check("b ++= Nil => b == " + baseList, b, baseList)
+    check("b ++= Nil => b" + baseList, b, baseList)
     val c = Factory(1, 2, 3, 4)
     c ++= baseList
-    check("c ++= " + baseList + " => c == " + baseList, c, doubledList)
+    check("c ++= " + baseList + " => c" + baseList, c, doubledList)
     val d = Factory(1)
     d ++= List(2)
-    check("d ++= List(2), d == " + double, d, double)
+    check("d ++= List(2), d" + double, d, double)
   }
   def testAppend() {
     println("\tTesting appending a list of same type: " + testName)
     val a = Factory(1, 2, 3, 4)
     val b = Factory(1, 2, 3, 4)
     a.append(b)
-    check("a.append(b) => a == " + doubledList, a, doubledList)
+    check("a.append(b) => a", a, doubledList)
     val e = Factory.empty[Int]
     val c = Factory(1, 2, 3, 4)
     e.append(c)
-    check("e.append(c) => e == " + baseList, e, baseList)
+    check("e.append(c) => e", e, baseList)
     val e2 = Factory.empty[Int]
     val d = Factory(1, 2, 3, 4)
     d.append(e2)
-    check("d.append(e2) => d == " + baseList, d, baseList)
+    check("d.append(e2) => d", d, baseList)
   }
   def testInsert() {
     println("\tTesting insert: " + testName)
     val e = Factory.empty[Int]
     val a = Factory(1, 2, 3, 4)
     e.insert(a)
-    check("e.insert(a) => e == " + baseList, e, baseList)
+    check("e.insert(a) => e", e, baseList)
     val b = Factory(1, 2, 3, 4)
     val e2 = Factory.empty[Int]
     b.insert(e2)
-    check("b.insert(e2) => b == " + baseList, b, baseList)
+    check("b.insert(e2) => b", b, baseList)
     val c = Factory(1, 2, 3, 4)
     val d = Factory(1, 2, 3, 4)
     c.insert(d)
     val r = List(1, 1, 2, 3, 4, 2, 3, 4)
-    check("c.insert(d) => c == " + r, c, r)
+    check("c.insert(d) => c", c, r)
   }
   def testAssignHead() {
     println("\tTesting assignments to head: " + testName)
     val e = Factory.empty[Int]
     e.head = 1
-    check("e.head = 1 => e.head == 1", e.head, 1)
-    check("e.length == 1", e.length, 1)
-    check("e.tail.isEmpty == true", e.tail.isEmpty, true)
+    check("e.head = 1 => e.head", e.head, 1)
+    check("e.length", e.length, 1)
+    check("e.tail.isEmpty", e.tail.isEmpty, true)
     val a = Factory(1, 2)
     a.head = 3
-    check("a.head = 3 => a.head == 3", a.head, 3)
-    check("a.length == 2", a.length, 2)
-    check("a.tail.head == 2", a.tail.head, 2)
+    check("a.head = 3 => a.head", a.head, 3)
+    check("a.length", a.length, 2)
+    check("a.tail.head", a.tail.head, 2)
   }
   def testAssignTail() {
     println("\tTesting assignments to tail: " + testName)
@@ -139,24 +139,24 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
     val a = Factory(1)
     val b = Factory(2)
     a.tail = b
-    check("a.tail = b => a.tail == b", a.tail, b)
-    check("a.length == 2", a.length, 2)
+    check("a.tail = b => a.tail", a.tail, b)
+    check("a.length", a.length, 2)
     a.tail = Factory.empty[Int]
-    check("a.tail.isEmpty == true", a.tail.isEmpty, true)
-    check("a.length == 1", a.length, 1)
+    check("a.tail.isEmpty", a.tail.isEmpty, true)
+    check("a.length", a.length, 1)
   }
   def testClear() {
     println("\tTesting clear(): " + testName)
     val e = Factory.empty[Int]
     e.clear()
-    check("e.isEmpty == true", e.isEmpty, true)
+    check("e.isEmpty", e.isEmpty, true)
     val a = Factory(1, 2, 3, 4)
     val b = a.tail
     a.clear()
-    check("a.isEmpty == true", a.isEmpty, true)
-    check("b.isEmpty == false", b.isEmpty, false)
-    check("b.length == 3", b.length, 3)
-    check("b.head == 2", b.head, 2)
+    check("a.isEmpty", a.isEmpty, true)
+    check("b.isEmpty", b.isEmpty, false)
+    check("b.length", b.length, 3)
+    check("b.head", b.head, 2)
   }
   // testGet
   // testUpdate
