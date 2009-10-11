@@ -82,6 +82,27 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
     d ++= List(2)
     check("d ++= List(2), d == " + double, d == double, true)
   }
+  def testAppend() {
+    println("\tTesting appending a list of same type: " + testName)
+    val a = Factory(1, 2, 3, 4)
+    val b = Factory(1, 2, 3, 4)
+    a.append(b)
+    check("a.append(b) => a == " + doubledList, a == doubledList, true)
+    val e = Factory.empty[Int]
+    val c = Factory(1, 2, 3, 4)
+    e.append(c)
+    check("e.append(c) => e == " + baseList, e == baseList, true)
+    val e2 = Factory.empty[Int]
+    val d = Factory(1, 2, 3, 4)
+    d.append(e2)
+    check("d.append(e2) => d == " + baseList, d == baseList, true)
+  }
+  // testInsert
+  // testAssignHead
+  // testAssignTail
+  // testClear
+  // testGet
+  // testUpdate
   def run() {
     println("Testing: " + testName)
     testEmpty()
@@ -89,6 +110,7 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
     testInserts()
     testMakeFromSeq()
     testAppendSeq()
+    testAppend()
     println("Done testing: " + testName)
   }
 }
