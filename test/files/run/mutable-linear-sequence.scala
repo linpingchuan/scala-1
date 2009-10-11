@@ -142,10 +142,22 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
     check("a.tail = b => a.tail == b", a.tail, b)
     check("a.length == 2", a.length, 2)
     a.tail = Factory.empty[Int]
-    check("a.tail.isEmpty", a.tail.isEmpty, true)
+    check("a.tail.isEmpty == true", a.tail.isEmpty, true)
     check("a.length == 1", a.length, 1)
   }
-  // testClear
+  def testClear() {
+    println("\tTesting clear(): " + testName)
+    val e = Factory.empty[Int]
+    e.clear()
+    check("e.isEmpty == true", e.isEmpty, true)
+    val a = Factory(1, 2, 3, 4)
+    val b = a.tail
+    a.clear()
+    check("a.isEmpty == true", a.isEmpty, true)
+    check("b.isEmpty == false", b.isEmpty, false)
+    check("b.length == 3", b.length, 3)
+    check("b.head == 2", b.head, 2)
+  }
   // testGet
   // testUpdate
   def run() {
@@ -159,6 +171,7 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
     testInsert()
     testAssignHead()
     testAssignTail()
+    testClear()
     println("Done testing: " + testName)
   }
 }
