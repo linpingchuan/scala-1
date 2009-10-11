@@ -217,8 +217,15 @@ object LinkedListTest extends TestSuite[LinkedList] {
   val testName = "LinkedList"
 }
 
+import scala.collection.mutable.DoubleLinkedList
+object DoubleLinkedListTest extends TestSuite[DoubleLinkedList] {
+  val Factory = DoubleLinkedList
+  val testName = "DoubleLinkedList"
+}
+
 object Test {
   def main(args: Array[String]) {
     LinkedListTest.run()
+    DoubleLinkedListTest.run()
   }
 }
