@@ -63,11 +63,21 @@ trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
     self
   }
 
-  /** insert <code>that</code> immediately after this node */
+  /** insert <code>that</code> immediately after this node
+   *  unless <code>this</code> is empty, in which case <code>this</code>
+   *  assumes the <code>head</code> and <code>tail</code> of <code>that</code>
+   *  and <code>that</code> is cleared
+   */
   def insert(that: This) {
     if (!that.isEmpty) {
-      that.append(next)
-      next = that
+      if (isEmpty) {
+	_elem = that._elem
+	_next = that._next
+	that.clear()
+      } else {
+	that.append(_next)
+	_next = that
+      }
     }
   }
 
