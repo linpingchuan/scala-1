@@ -126,7 +126,25 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
     check("a.length == 2", a.length, 2)
     check("a.tail.head == 2", a.tail.head, 2)
   }
-  // testAssignTail
+  def testAssignTail() {
+    println("\tTesting assignments to tail: " + testName)
+    val e = Factory.empty[Int]
+    try {
+      e.tail = Factory(1, 2, 3)
+      println("\t\tAssignment to tail of empty " + testName + " should have thrown a NoSuchElementException")
+    } catch {
+      case e: NoSuchElementException => println("\t\tcaught NoSuchElementException CORRECT")
+      case e: Exception => println("\t\tcaught " + e + " expected NoSuchElementException INCORRECT")
+    }
+    val a = Factory(1)
+    val b = Factory(2)
+    a.tail = b
+    check("a.tail = b => a.tail == b", a.tail, b)
+    check("a.length == 2", a.length, 2)
+    a.tail = Factory.empty[Int]
+    check("a.tail.isEmpty", a.tail.isEmpty, true)
+    check("a.length == 1", a.length, 1)
+  }
   // testClear
   // testGet
   // testUpdate
@@ -140,6 +158,7 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
     testAppend()
     testInsert()
     testAssignHead()
+    testAssignTail()
     println("Done testing: " + testName)
   }
 }
