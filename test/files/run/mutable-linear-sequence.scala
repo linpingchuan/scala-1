@@ -205,6 +205,9 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
     testUpdate()
     println("Done testing: " + testName)
   }
+  def main(args: Array[String]) {
+    run()
+  }
 }
 
 import scala.collection.mutable.LinkedList
