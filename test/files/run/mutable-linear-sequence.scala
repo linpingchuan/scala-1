@@ -17,6 +17,14 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
     val correctness = if (result == expected) "CORRECT" else "INCORRECT, should equal " + expected
     println("\t\t" + label + " == " + result + " " + correctness)
   }
+  def checkNSE(label: String, op: => Any) {
+    try {
+      op
+      println("\t\t" + label + " should have thrown a NoSuchElementException INCORRECT")
+    } catch {
+      case e: NoSuchElementException => println("\t\t" + label + " threw a NoSuchElementException CORRECT")
+    }
+  }
   def testEmpty() {
     println("\tTesting empty: " + testName)
     val a = Factory.empty[Int]
@@ -24,20 +32,8 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
     check("length", a.length, 0)
     val b = Factory[Int]()
     check("a == b", a == b, true)
-    try {
-      a.head
-      println("\t\ta.head should have thrown a NoSuchElementException")
-    } catch {
-      case e: NoSuchElementException => "\t\ta.head threw " + e + " CORRECT"
-      case e: Exception => "\t\ta.head threw " + e + " INCORRECT, should be NoSuchElementException"
-    }
-    try {
-      a.tail
-      println("\t\ta.tail should have thrown a NoSuchElementException")
-    } catch {
-      case e: NoSuchElementException => "\t\ta.tail threw " + e + " CORRECT"
-      case e: Exception => "\t\ta.tail threw " + e + " INCORRECT"
-    }
+    checkNSE("a.head", a.head)
+    checkNSE("a.tail", a.tail)
   }
   def testSingular() {
     println("\tTesting singular: " + testName)
@@ -129,13 +125,7 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
   def testAssignTail() {
     println("\tTesting assignments to tail: " + testName)
     val e = Factory.empty[Int]
-    try {
-      e.tail = Factory(1, 2, 3)
-      println("\t\tAssignment to tail of empty " + testName + " should have thrown a NoSuchElementException")
-    } catch {
-      case e: NoSuchElementException => println("\t\tcaught NoSuchElementException CORRECT")
-      case e: Exception => println("\t\tcaught " + e + " expected NoSuchElementException INCORRECT")
-    }
+    checkNSE("e.tail = Factory(1, 2, 3)", e.tail = Factory(1, 2, 3))
     val a = Factory(1)
     val b = Factory(2)
     a.tail = b
@@ -170,7 +160,21 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
     check("single.get(0)", single.get(0), Some(1))
     check("single.get(1)", single.get(1), None)
   }
-  // testUpdate
+  def testUpdate() {
+    println("\tTesting update: " + testName)
+    val empty = Factory.empty[Int]
+    checkNSE("empty(0) = 1", empty(0) = 1)
+    val single = Factory(1)
+    single(0) = 2
+    check("single(0) = 2, single(0)", single(0), 2)
+    checkNSE("single(1) = 2", single(1) = 2)
+    val list = Factory(1, 2, 3, 4)
+    list(0) = 5
+    check("list(0) = 5, list(0)", list(0), 5)
+    list(2) = 7
+    check("list(2) = 7, list(2)", list(2), 7)
+    checkNSE("list(5) = 8", list(5) = 8)
+  }
   // testApply
   def run() {
     println("Testing: " + testName)
@@ -185,6 +189,8 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
     testAssignTail()
     testClear()
     testGet()
+    // testApply()
+    testUpdate()
     println("Done testing: " + testName)
   }
 }
