@@ -160,6 +160,19 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
     check("single.get(0)", single.get(0), Some(1))
     check("single.get(1)", single.get(1), None)
   }
+  def testApply() {
+    println("\tTesting apply()")
+    val empty = Factory.empty[Int]
+    checkNSE("empty(0)", empty(0))
+    val single = Factory(1)
+    check("single(0)", single(0), 1)
+    checkNSE("single(1)", single(1))
+    val list = Factory(1, 2, 3, 4)
+    check("list(0)", list(0), 1)
+    check("list(2)", list(2), 3)
+    check("list(2)", list(3), 4)
+    checkNSE("list(5)", list(5))
+  }
   def testUpdate() {
     println("\tTesting update: " + testName)
     val empty = Factory.empty[Int]
@@ -175,7 +188,6 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
     check("list(2) = 7, list(2)", list(2), 7)
     checkNSE("list(5) = 8", list(5) = 8)
   }
-  // testApply
   def run() {
     println("Testing: " + testName)
     testEmpty()
@@ -189,7 +201,7 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
     testAssignTail()
     testClear()
     testGet()
-    // testApply()
+    testApply()
     testUpdate()
     println("Done testing: " + testName)
   }
