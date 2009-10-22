@@ -223,9 +223,16 @@ object DoubleLinkedListTest extends TestSuite[DoubleLinkedList] {
   val testName = "DoubleLinkedList"
 }
 
+import scala.collection.mutable.Queue
+object QueueTest extends TestSuite[Queue] {
+  val Factory = Queue
+  val testName = "Queue"
+}
+
 object Test {
   def main(args: Array[String]) {
     LinkedListTest.run()
     DoubleLinkedListTest.run()
+    QueueTest.run()
   }
 }
