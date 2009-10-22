@@ -65,18 +65,32 @@ trait DoubleLinkedListLike[A, This >: Null <: DoubleLinkedListLike[A, This]] ext
 
   def insert(that: This) {
     if (!that.isEmpty) {
-      _next._prev = that
-      that.append(_next)
-      _next = that
-      that._prev = self
+      if (_next eq null) {
+	// this is the end of the list, it is impossible to insert after the end
+	// instead, set this node's head to that's head and make it
+	head = that.head
+	if (!that.tail.isEmpty) {
+	  _next = that._next
+	  _next._prev = self
+	}
+	// this node has stolen that node's data, so make sure it can no longer
+	// reference it
+	that.clear() 
+      } else {
+	_next._prev = that
+	that.append(_next)
+	_next = that
+	that._prev = self
+      }
     }
   }
 
   def head_=(e: A) {
-    if (isEmpty) {
-      _next = makeEmpty
-      _prev = makeEmpty
-    }
+    // if this is a sentinal node then setting the head will make it so that it
+    // can no longer be a sentinal node, and therefore new sentinal nodes must
+    // be created as appropriate
+    if (_next eq null) _next = makeEmpty  // this node was the back sentinal
+    if (_prev eq null)  _prev = makeEmpty // this node was the front sentinal
     _elem = e
   }
   override def tail_=(that: This) {
