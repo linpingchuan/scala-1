@@ -17,7 +17,8 @@ package scala.collection.mutable
  *  types of linked lists.
  *
  *  @author  Matthias Zenger
- *  @version 1.0, 08/07/2003
+ *  @author  Erik Engbrecht
+ *  @version 2.8
  *  @since   2.8
  */
 trait DoubleLinkedListLike[A, This >: Null <: DoubleLinkedListLike[A, This]] extends LinearSequenceLike[A, This] {
@@ -26,9 +27,46 @@ trait DoubleLinkedListLike[A, This >: Null <: DoubleLinkedListLike[A, This]] ext
   protected def clearElem() { _elem = null.asInstanceOf[A] }
 
   override def isEmpty = (_next eq null) || (_prev eq null)
+  /** returns true if this node is empty and there are not other nodes in the list
+   *  <p>if <code>isSentinal</code> is true then <code>isListEmpty</code> is false</p>
+   *  <p>if <code>isEmpty</code> is false then <code>isListEmpty</code> is false</p>
+   */
+  def isListEmpty = (_next eq null) && (_prev eq null)
+
+  /** true if this is the sentinal node at the front of the list
+   *  if true, then this node is empty, however unlike other empty nodes
+   *  <code>tail</code>/<code>next</code> is defined and thus will not throw a
+   *  <code>NoSuchElementException</code> when accessed. However <code>head</code>
+   *  and <code>prev</code> will throw throw a <code>NoSuchElementException</code>.
+   */
+  def isFrontSentinal = (_prev ne null) && (_next eq null)
+
+  /** true if this a the rear sentinal node of the list
+   *  if true, then this node is empty, however unlike other empty nodes
+   *  <code>prev</code> is defined and thus will not throw a <code>NoSuchElementException</code>
+   *  when accessed.  However <code>head</code> and <code>tail</code>/<code>next</code> are
+   *  not defined and will throw a <code>NoSuchElementException</code>.
+   */
+  def isRearSentinal = (_next ne null) && (_prev eq null)
+
+  /** true if this node is a front sentinal or a rear sentinal
+   *  Sentinal nodes do not have a defined <code>head</code> and have either a defined
+   *  <code>tail</code> (for a front sentinal) or a defined <code>prev</code> (for a rear
+   *  sentinal).
+   */
+  def isSentinal = isFrontSentinal || isRearSentinal
 
   protected var _prev: This = _
   def prev: This = if (_prev ne null) _prev else throw new NoSuchElementException()
+  def prev_=(that: This) {
+    if (that eq null) throw new NullPointerException("prev cannot be set to null")
+    if (!_prev.isEmpty) {
+      _prev._next = makeEmpty
+      _prev._next._prev = _prev
+    }
+    _prev = that
+    that._next = self
+  }
 
   def append(that: This) {
     if (!that.isEmpty) {
@@ -65,8 +103,8 @@ trait DoubleLinkedListLike[A, This >: Null <: DoubleLinkedListLike[A, This]] ext
 
   def insert(that: This) {
     if (!that.isEmpty) {
-      if (_next eq null) {
-	// this is the end of the list, it is impossible to insert after the end
+      if (isRearSentinal) {
+	// this is the rear sentinal node of the list, it is impossible to insert after the end
 	// instead, set this node's head to that's head and make it
 	head = that.head
 	if (!that.tail.isEmpty) {
@@ -77,6 +115,7 @@ trait DoubleLinkedListLike[A, This >: Null <: DoubleLinkedListLike[A, This]] ext
 	// reference it
 	that.clear() 
       } else {
+	// this node is a regular node or 
 	_next._prev = that
 	that.append(_next)
 	_next = that
@@ -89,8 +128,9 @@ trait DoubleLinkedListLike[A, This >: Null <: DoubleLinkedListLike[A, This]] ext
     // if this is a sentinal node then setting the head will make it so that it
     // can no longer be a sentinal node, and therefore new sentinal nodes must
     // be created as appropriate
-    if (_next eq null) _next = makeEmpty  // this node was the back sentinal
-    if (_prev eq null)  _prev = makeEmpty // this node was the front sentinal
+    if (isFrontSentinal)  newFrontSentinal()    // create a new front sentinal to replace this one
+    else if (isRearSentinal) newRearSentinal()  // create a new rear sentinal to replace this one
+    else if (isEmpty) newSentinals()            // add front and rear sentinals now that this list has data
     _elem = e
   }
   override def tail_=(that: This) {
@@ -103,18 +143,11 @@ trait DoubleLinkedListLike[A, This >: Null <: DoubleLinkedListLike[A, This]] ext
     _next = that
     that._prev = self
   }
-  def prev_=(that: This) {
-    if (that eq null) throw new NullPointerException("prev cannot be set to null")
-    if (!_prev.isEmpty) {
-      _prev._next = makeEmpty
-      _prev._next._prev = _prev
-    }
-    _prev = that
-    that._next = self
-  }
 
   def clear() {
-    if (!isEmpty) {
+    if (isFrontSentinal) next.newFrontSentinal()
+    else if (isRearSentinal) prev.newRearSentinal()
+    else if (!isEmpty) {
       if (!_prev.isEmpty) {
 	_prev._next = makeEmpty
 	_prev._next._prev = _prev
@@ -132,12 +165,35 @@ trait DoubleLinkedListLike[A, This >: Null <: DoubleLinkedListLike[A, This]] ext
     }
   }
 
+  protected def newSentinals() {
+    newFrontSentinal()
+    newRearSentinal()
+  }
+
+  protected def newFrontSentinal() = {
+    val s = makeEmpty
+    s._next = self
+    _prev = s
+    s
+  }
+
+  protected def newRearSentinal() = {
+    val s = makeEmpty
+    s._prev = self
+    _next = s
+    s
+  }
+
   def remove() {
-    if (next ne null)
-      next._prev = _prev
-    if (_prev ne null)
-      _prev.next = next
-    _prev = null
-    next = makeEmpty
+    if (isFrontSentinal) {
+      _next.newFrontSentinal()
+      _next = null
+    } else if (isRearSentinal) {
+      _prev.newRearSentinal()
+      _prev = null
+    } else if (!isEmpty) {
+      if (!_prev.isEmpty) _prev._next = _next
+      if (!_next.isEmpty) _next._prev = _prev
+    }
   }
 }

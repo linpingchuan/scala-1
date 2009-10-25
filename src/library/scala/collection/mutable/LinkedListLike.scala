@@ -21,6 +21,7 @@ import scala.{ collection => col }
  *  linked lists.
  *  @author  Matthias Zenger
  *  @author  Martin Odersky
+ *  @author  Erik Engbrecht
  *  @version 2.8
  *  @since   2.8
  */

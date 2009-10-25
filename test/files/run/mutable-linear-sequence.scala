@@ -7,22 +7,25 @@ import scala.collection.generic.{ SequenceFactory, GenericTraversableTemplate }
 abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X, CC] with LinearSequence[X] with LinearSequenceLike[X, CC[X]]] {
   val Factory: SequenceFactory[CC]
   val testName: String
-  val singular = List(1)
-  val double = List(1, 2)
-  val triple = List(1, 2, 3)
-  val baseList = List(1, 2, 3, 4)
-  val doubledList = List(1, 2, 3, 4, 1, 2, 3, 4)
-  def check[R](label: String, op: => R, expected: R) {
+  lazy val singular = Factory(1)
+  lazy val double = Factory(1, 2)
+  lazy val triple = Factory(1, 2, 3)
+  lazy val baseList = Factory(1, 2, 3, 4)
+  lazy val doubledList = Factory(1, 2, 3, 4, 1, 2, 3, 4)
+  def check[R](label: String, op: => R, expected: R): (R, Boolean) = {
     val result = op
-    val correctness = if (result == expected) "CORRECT" else "INCORRECT, should equal " + expected
-    println("\t\t" + label + " == " + result + " " + correctness)
+    val correct = if (result != expected) {
+      println("\t\t" + label + " == " + result + " INCORRECT, should equal" + expected)
+      false
+    } else true
+    (result, correct)
   }
   def checkNSE(label: String, op: => Any) {
     try {
       op
       println("\t\t" + label + " should have thrown a NoSuchElementException INCORRECT")
     } catch {
-      case e: NoSuchElementException => println("\t\t" + label + " threw a NoSuchElementException CORRECT")
+      case e: NoSuchElementException => //println("\t\t" + label + " threw a NoSuchElementException CORRECT")
     }
   }
   def testEmpty() {
@@ -210,11 +213,68 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
   }
 }
 
-import scala.collection.mutable.LinkedList
+import scala.collection.mutable.{ LinkedListLike, LinkedList }
 
-object LinkedListTest extends TestSuite[LinkedList] {
+abstract class LinkedListTestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X, CC] with LinearSequence[X] with LinkedListLike[X, CC[X]]] extends TestSuite[CC] {
+  // no special tests yet
+}
+
+object LinkedListTest extends LinkedListTestSuite[LinkedList] {
   val Factory = LinkedList
   val testName = "LinkedList"
+}
+
+import scala.collection.mutable.DoubleLinkedListLike
+abstract class DoubleLinkedListTestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X, CC] with LinearSequence[X] with DoubleLinkedListLike[X, CC[X]]] 
+               extends TestSuite[CC] {
+  def getLastNode[A](node: CC[A]): CC[A] = if (node.tail.isEmpty) node else getLastNode(node.tail)
+  def getFirstNode[A](node: CC[A]): CC[A] = if (node.prev.isEmpty) node else getFirstNode(node.prev)
+  def checkSentinals(label: String, list: CC[_]) {
+    val first = getFirstNode(list)
+    if (first.isEmpty) {
+      // first is empty, it should not have any sentinals
+      checkNSE(label + " check first.tail", first.tail)
+      checkNSE(label + " check first.prev", first.prev)
+      checkNSE(label + " check first.next", first.next)
+    } else {
+      // not empty, should have sentinals
+      // previous should be a front sentinals
+      check(label + " check first.prev.isFrontSentinal", first.prev.isFrontSentinal, true)
+      check(label + " check first.prev.isRearSentinal", first.prev.isRearSentinal, false)
+      check(label + " check first.prev.isSentinal", first.prev.isSentinal, true)
+      check(label + " check first.prev.isEmpty", first.prev.isEmpty, true)
+      check(label + " check first.prev.tail eq " + label, first.prev.tail eq first, true)
+      checkNSE(label + " check first.prev.prev", first.prev.prev)
+      // next of last node should be a rear sentinal
+      val last = getLastNode(first)
+      check(label + " check last.next.isFrontSentinal", last.next.isFrontSentinal, false)
+      check(label + " check last.next.isRearSentinal", last.next.isRearSentinal, true)
+      check(label + " check last.next.isSentinal", last.next.isSentinal, true)
+      check(label + " check last.next.isEmpty", last.next.isEmpty, true)
+      check(label + " check last.next.prev eq " + label, last.next.prev eq last, true)
+    }
+  }
+  override def check[R](label: String, op: => R, expected: R): (R, Boolean) = {
+    val (result, correct) = super.check(label, op, expected)
+    if (correct) {
+      result match {
+	case list: CC[_] => checkSentinals(label, list)
+	case _ => // do nothing
+      }
+    }
+    (result, correct)
+  }
+  
+  def testRemove() {
+    println("\tTesting remove: " + testName)
+    // remove only node
+    val t1 = Factory(1)
+    
+    // remove central node from list with several items
+    // remove last node from list with several items
+    // remove first node from list with several items
+    // remove empty node
+  }
 }
 
 import scala.collection.mutable.DoubleLinkedList
