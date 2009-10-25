@@ -264,6 +264,18 @@ abstract class DoubleLinkedListTestSuite[CC[X] <: Sequence[X] with GenericTraver
     }
     (result, correct)
   }
+
+  override def testInsert() {
+    super.testInsert()
+    // test insert on front sentinal
+    val l1 = Factory(1)
+    val l2 = Factory(2)
+    check("l1.prev.insert(l2)", l1.prev.insert(l2), Factory(2, 1))
+    // test insert on rear sentinal
+    val l3 = Factory(1)
+    val l4 = Factory(2)
+    check("l3.next.insert(l4)", l3.next.insert(l4), Factory(1, 2))
+  }
   
   def testRemove() {
     println("\tTesting remove: " + testName)
@@ -274,6 +286,8 @@ abstract class DoubleLinkedListTestSuite[CC[X] <: Sequence[X] with GenericTraver
     // remove last node from list with several items
     // remove first node from list with several items
     // remove empty node
+    // remove front sentinal node
+    // remove rear sentinal node
   }
 }
 
