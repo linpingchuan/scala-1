@@ -70,12 +70,13 @@ trait DoubleLinkedListLike[A, This >: Null <: DoubleLinkedListLike[A, This]] ext
 
   def append(that: This) {
     if (!that.isEmpty) {
-      if (isEmpty) {
+      if (isListEmpty) {
 	_elem = that._elem
 	_next = that._next
 	_next._prev = self
+	newFrontSentinal()
       } else {
-	val last = lastElementNode
+	val last = if (isRearSentinal) prev else lastElementNode
 	last._next = that
 	that._prev = last
       }
