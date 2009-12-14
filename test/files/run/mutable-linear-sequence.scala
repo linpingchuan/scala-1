@@ -76,7 +76,7 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
     check("b ++= Nil => b" + baseList, b, baseList)
     val c = Factory(1, 2, 3, 4)
     c ++= baseList
-    check("c ++= " + baseList + " => c" + baseList, c, doubledList)
+    check("c ++= " + baseList + " => " + baseList, c, doubledList)
     val d = Factory(1)
     d ++= List(2)
     check("d ++= List(2), d" + double, d, double)
@@ -265,6 +265,12 @@ abstract class DoubleLinkedListTestSuite[CC[X] <: Sequence[X] with GenericTraver
     (result, correct)
   }
 
+  override def testAppend() {
+    super.testAppend()
+    // test appends involving nodes from the middles of list to ensure the lists are properly broken apart
+    // and are all still valid
+  }
+
   override def testInsert() {
     super.testInsert()
     // test insert on front sentinal
@@ -275,19 +281,78 @@ abstract class DoubleLinkedListTestSuite[CC[X] <: Sequence[X] with GenericTraver
     val l3 = Factory(1)
     val l4 = Factory(2)
     check("l3.next.insert(l4)", l3.next.insert(l4), Factory(1, 2))
+    // insert of middle of one list into the middle of another list
+    val l5 = Factory(1, 2, 3, 4)
+    val l5tail = l5.tail
+    val l6 = Factory(5, 6, 7, 8)
+    val l6tail = l6.tail
+    l5tail.insert(l6tail)
+    check("l5", l5, Factory(1, 2, 6, 7, 8, 3, 4))
+    check("l5tail", l5tail, Factory(2, 6, 7, 8, 3, 4))
+    check("l6tail", l6tail, Factory(6, 7, 8, 3, 4)) //hmmm, this brings about an interesting issue regarding equality and double-linked lists
+    check("l6", l6, Factory(5)) // the front of L6 has now been broken off from what used to be the rest of L6
   }
   
   def testRemove() {
     println("\tTesting remove: " + testName)
     // remove only node
     val t1 = Factory(1)
-    
+    t1.remove()
+    check("t1.isEmptyList", t1.isListEmpty, true)
     // remove central node from list with several items
+    val t2 = Factory(1, 2, 3, 4, 5)
+    val t2removed = t2.tail.tail
+    t2removed.remove()
+    check("t2removed.head", t2removed.head, 3)
+    check("t2removed.length", t2removed.length, 1)
+    check("t2", t2, Factory(1, 2, 4, 5))
     // remove last node from list with several items
+    val t3 = Factory(1, 2, 3, 4)
+    val t3removed = t3.tail.tail.tail
+    t3removed.remove()
+    check("t3removed.head", t3removed.head, 4)
+    check("t3removed.length", t3removed.length, 1)
+    check("t3", t3, Factory(1, 2, 3))
     // remove first node from list with several items
+    val t5 = Factory(1, 2, 3, 4)
+    val t5sentinal = t5.prev
+    t5.remove()
+    check("t5.head", t5.head, 1)
+    check("t5.length", t5.length, 1)
+    check("t5sentinal.tail", t5sentinal.tail, Factory(2, 3, 4))
     // remove empty node
+    val t6 = Factory()
+    t6.remove()
+    check("t6", t6, Factory())
     // remove front sentinal node
+    val t7 = Factory(1, 2, 3, 4)
+    val t7frontSentinal = t7.prev
+    t7frontSentinal.remove()
+    check("t7", t7, Factory(1, 2, 3, 4))
+    check("t7frontSentinal.isEmpty", t7frontSentinal.isEmpty, true)
+    check("t7frontSentinal.isSentinal", t7frontSentinal.isSentinal, false)
     // remove rear sentinal node
+    val t8 = Factory(1, 2, 3, 4)
+    val t8rearSentinal = t8.tail.tail.tail.tail
+    t8rearSentinal.remove()
+    check("t8", t8, Factory(1, 2, 3, 4))
+    check("t8rearSentinal.isEmpty", t8rearSentinal.isEmpty, true)
+    check("t8rearSentinal.isSentinal", t8rearSentinal.isSentinal, false)
+  }
+  // TODO: test sentinal node equality
+
+  def testAssignPrev() {
+    println("\tTODO: write checks for assigning prev")
+  }
+
+  override def testAssignTail() {
+    super.testAssignTail()
+    print("\tTODO: write checks that ensure assigning to tail properly unlinks tails from the list")
+  }
+  override def run() {
+    super.run()
+    testRemove()
+    testAssignPrev()
   }
 }
 
