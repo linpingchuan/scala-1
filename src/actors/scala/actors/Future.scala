@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2005-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2005-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -79,9 +79,10 @@ object Futures {
    */
   def awaitAll(timeout: Long, fts: Future[Any]*): List[Option[Any]] = {
     val thisActor = Actor.self
-    Actor.timer.schedule(new java.util.TimerTask {
+    val timerTask = new java.util.TimerTask {
       def run() { thisActor ! TIMEOUT }
-    }, timeout)
+    }
+    Actor.timer.schedule(timerTask, timeout)
 
     var resultsMap: collection.mutable.Map[Int, Option[Any]] = new collection.mutable.HashMap[Int, Option[Any]]
 
@@ -126,13 +127,18 @@ object Futures {
       Actor.receive(reaction)
     }
 
-    awaitWith(partFuns)
+    if (partFuns.length > 0)
+      awaitWith(partFuns)
 
     var results: List[Option[Any]] = Nil
     val size = resultsMap.size
     for (i <- 0 until size) {
       results = resultsMap(size - i - 1) :: results
     }
+
+    // cancel scheduled timer task
+    timerTask.cancel()
+
     results
   }
 

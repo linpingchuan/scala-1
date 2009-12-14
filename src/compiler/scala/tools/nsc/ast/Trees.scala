@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2009 LAMP/EPFL
+ * Copyright 2005-2010 LAMP/EPFL
  * @author  Martin Odersky
  */
 // $Id$
@@ -52,7 +52,7 @@ trait Trees {
    *    <strong>Note:</strong> the typechecker drops these annotations,
    *    use the AnnotationInfo's (Symbol.annotations) in later phases. 
    */  
-  case class Modifiers(flags: Long, privateWithin: Name, annotations: List[Tree]) {
+  case class Modifiers(flags: Long, privateWithin: Name, annotations: List[Tree], positions: Map[Long, Position]) {
     def isCovariant     = hasFlag(COVARIANT    )  // marked with `+'
     def isContravariant = hasFlag(CONTRAVARIANT)  // marked with `-'
     def isPrivate   = hasFlag(PRIVATE  )
@@ -64,6 +64,7 @@ trait Trees {
     def isAbstract  = hasFlag(ABSTRACT )
     def isDeferred  = hasFlag(DEFERRED )
     def isCase      = hasFlag(CASE     )
+    def isLazy      = hasFlag(LAZY     )
     def isSealed    = hasFlag(SEALED   )
     def isFinal     = hasFlag(FINAL    )
     def isTrait     = hasFlag(TRAIT | notDEFERRED) // (part of DEVIRTUALIZE)
@@ -73,24 +74,26 @@ trait Trees {
     def & (flag: Long): Modifiers = {
       val flags1 = flags & flag
       if (flags1 == flags) this
-      else Modifiers(flags1, privateWithin, annotations)
+      else Modifiers(flags1, privateWithin, annotations, positions)
     }
     def &~ (flag: Long): Modifiers = {
       val flags1 = flags & (~flag)
       if (flags1 == flags) this
-      else Modifiers(flags1, privateWithin, annotations)
+      else Modifiers(flags1, privateWithin, annotations, positions)
     }
     def | (flag: Long): Modifiers = {
       val flags1 = flags | flag
       if (flags1 == flags) this
-      else Modifiers(flags1, privateWithin, annotations)
+      else Modifiers(flags1, privateWithin, annotations, positions)
     }
     def withAnnotations(annots: List[Tree]) =
       if (annots.isEmpty) this
-      else Modifiers(flags, privateWithin, annotations ::: annots)
+      else Modifiers(flags, privateWithin, annotations ::: annots, positions)
+    def withPosition(flag: Long, position: Position) =
+    	Modifiers(flags, privateWithin, annotations, positions + (flag -> position))
   }
 
-  def Modifiers(flags: Long, privateWithin: Name): Modifiers = Modifiers(flags, privateWithin, List())
+  def Modifiers(flags: Long, privateWithin: Name): Modifiers = Modifiers(flags, privateWithin, List(), new Map.EmptyMap)
   def Modifiers(flags: Long): Modifiers = Modifiers(flags, nme.EMPTY.toTypeName)
 
   val NoMods = Modifiers(0)
@@ -128,12 +131,23 @@ trait Trees {
       this
     }
     
+    /** Set tpe to give `tp` and return this.
+     */
     def setType(tp: Type): this.type = { 
       /*assert(kindingIrrelevant(tp) || !kindStar || !tp.isHigherKinded, 
-               tp+" should not be higher-kinded");*/ 
+               tp+" should not be higher-kinded"); */ 
       tpe = tp
       this 
     }
+
+    /** Like `setType`, but if this is a previously empty TypeTree
+     *  that fact is remembered so that resetType will snap back.
+     */
+    def defineType(tp: Type): this.type = setType(tp)
+
+    /** Reset type to `null`, with special handling of TypeTrees and the EmptyType
+     */
+    def resetType() { tpe = null }
 
     def symbol: Symbol = null
     def symbol_=(sym: Symbol) {
@@ -320,6 +334,7 @@ trait Trees {
     super.tpe_=(NoType)
     override def tpe_=(t: Type) = 
       if (t != NoType) throw new Error("tpe_=("+t+") inapplicable for <empty>")
+    override def resetType() {}
     override def isEmpty = true
   }
 
@@ -533,18 +548,29 @@ trait Trees {
       LabelDef(sym.name, params map Ident, rhs) setSymbol sym
     }
 
+  /** Import selector
+   *
+   * Representation of an imported name its optional rename and their optional positions
+   * 
+   * @param name      the imported name
+   * @param namePos   its position or -1 if undefined
+   * @param rename    the name the import is renamed to (== name if no renaming)
+   * @param renamePos the position of the rename or -1 if undefined
+   */
+  case class ImportSelector(name: Name, namePos: Int, rename: Name, renamePos: Int)
+  
   /** Import clause
    *
    *  @param expr
    *  @param selectors
    */
-  case class Import(expr: Tree, selectors: List[(Name, Name)])
+  case class Import(expr: Tree, selectors: List[ImportSelector])
        extends SymTree 
     // The symbol of an Import is an import symbol @see Symbol.newImport
     // It's used primarily as a marker to check that the import has been typechecked.
 
   /** Documented definition, eliminated by analyzer */
-  case class DocDef(comment: String, definition: Tree)
+  case class DocDef(comment: DocComment, definition: Tree)
        extends Tree {
     override def symbol: Symbol = definition.symbol
     override def symbol_=(sym: Symbol) { definition.symbol = sym }
@@ -598,23 +624,23 @@ trait Trees {
     var vparamss1 = 
       vparamss map (vps => vps.map { vd =>
         atPos(vd.pos.focus) {
+          val pa = if (vd.hasFlag(PRIVATE | LOCAL)) 0L else PARAMACCESSOR
           ValDef(
-            Modifiers(vd.mods.flags & (IMPLICIT | DEFAULTPARAM) | PARAM) withAnnotations vd.mods.annotations,
+            Modifiers(vd.mods.flags & (IMPLICIT | DEFAULTPARAM) | PARAM | pa) withAnnotations vd.mods.annotations,
             vd.name, vd.tpt.duplicate, vd.rhs.duplicate)
         }})
     val (edefs, rest) = body span treeInfo.isEarlyDef
     val (evdefs, etdefs) = edefs partition treeInfo.isEarlyValDef
-    val (lvdefs, gvdefs) = List.unzip {
-      evdefs map {
-        case vdef @ ValDef(mods, name, tpt, rhs) =>
-          val fld = treeCopy.ValDef(
-            vdef.duplicate, mods, name, 
-            atPos(vdef.pos.focus) { TypeTree() setOriginal tpt setPos tpt.pos.focus }, // atPos in case 
-            EmptyTree)
-          val local = treeCopy.ValDef(vdef, Modifiers(PRESUPER), name, tpt, rhs)
-          (local, fld)
-      }
-    }
+    val (lvdefs, gvdefs) = evdefs map {
+      case vdef @ ValDef(mods, name, tpt, rhs) =>
+        val fld = treeCopy.ValDef(
+          vdef.duplicate, mods, name, 
+          atPos(vdef.pos.focus) { TypeTree() setOriginal tpt setPos tpt.pos.focus }, // atPos in case 
+          EmptyTree)
+        val local = treeCopy.ValDef(vdef, Modifiers(PRESUPER), name, tpt, rhs)
+        (local, fld)
+    } unzip
+
     val constrs = {
       if (constrMods.isTrait) {
         if (body forall treeInfo.isInterfaceMember) List()
@@ -641,7 +667,7 @@ trait Trees {
     val vparamss2 = vparamss map (vps => vps map { vd => 
       treeCopy.ValDef(vd, vd.mods &~ DEFAULTPARAM, vd.name, vd.tpt, EmptyTree)
     })
-    Template(parents, self, gvdefs ::: List.flatten(vparamss2) ::: constrs ::: etdefs ::: rest)
+    Template(parents, self, gvdefs ::: vparamss2.flatten ::: constrs ::: etdefs ::: rest)
   }
 
   /** Block of expressions (semicolon separated expressions) */
@@ -656,12 +682,6 @@ trait Trees {
 
   /** casedef shorthand */
   def CaseDef(pat: Tree, body: Tree): CaseDef = CaseDef(pat, EmptyTree, body)
-
-  /** Sequence of patterns (comma separated expressions), eliminated by the
-   *  <code>TransMatch</code> phase.
-   */
-  case class Sequence(trees: List[Tree])
-       extends TermTree
 
   /** Alternatives of patterns, eliminated by TransMatch, except for
    *  occurences in encoded Switch stmt (=remaining Match(CaseDef(...))
@@ -860,11 +880,24 @@ trait Trees {
   case class TypeTree() extends TypTree {
     override def symbol = if (tpe == null) null else tpe.typeSymbol
 
-    private var orig: Tree = null // should be EmptyTree?
+    private var orig: Tree = null 
+    private var wasEmpty: Boolean = false
 
     def original: Tree = orig
 
     def setOriginal(tree: Tree): this.type = { orig = tree; setPos(tree.pos); this }
+
+    override def defineType(tp: Type): this.type = {
+      wasEmpty = isEmpty
+      setType(tp)
+    }
+
+    /** Reset type to null, unless type original was empty and then
+     *  got its type via a defineType
+     */
+    override def resetType() {
+      if (wasEmpty) tpe = null
+    }
 
     override def isEmpty = (tpe eq null) || tpe == NoType
   }
@@ -957,8 +990,6 @@ trait Trees {
      // { stats; expr }
   case CaseDef(pat, guard, body) =>                               (eliminated by transmatch/explicitouter)
     // case pat if guard => body
-  case Sequence(trees) =>                                         (eliminated by transmatch/explicitouter)
-    // pat1, ..., pat_n
   case Alternative(trees) =>                                      (eliminated by transmatch/explicitouter)
     // pat1 | ... | patn
   case Star(elem) =>                                              (eliminated by transmatch/explicitouter)
@@ -1040,12 +1071,11 @@ trait Trees {
     def DefDef(tree: Tree, mods: Modifiers, name: Name, tparams: List[TypeDef], vparamss: List[List[ValDef]], tpt: Tree, rhs: Tree): DefDef
     def TypeDef(tree: Tree, mods: Modifiers, name: Name, tparams: List[TypeDef], rhs: Tree): TypeDef
     def LabelDef(tree: Tree, name: Name, params: List[Ident], rhs: Tree): LabelDef
-    def Import(tree: Tree, expr: Tree, selectors: List[(Name, Name)]): Import
-    def DocDef(tree: Tree, comment: String, definition: Tree): DocDef
+    def Import(tree: Tree, expr: Tree, selectors: List[ImportSelector]): Import
+    def DocDef(tree: Tree, comment: DocComment, definition: Tree): DocDef
     def Template(tree: Tree, parents: List[Tree], self: ValDef, body: List[Tree]): Template
     def Block(tree: Tree, stats: List[Tree], expr: Tree): Block
     def CaseDef(tree: Tree, pat: Tree, guard: Tree, body: Tree): CaseDef
-    def Sequence(tree: Tree, trees: List[Tree]): Sequence
     def Alternative(tree: Tree, trees: List[Tree]): Alternative
     def Star(tree: Tree, elem: Tree): Star
     def Bind(tree: Tree, name: Name, body: Tree): Bind
@@ -1095,9 +1125,9 @@ trait Trees {
       new TypeDef(mods, name, tparams, rhs).copyAttrs(tree)
     def LabelDef(tree: Tree, name: Name, params: List[Ident], rhs: Tree) =
       new LabelDef(name, params, rhs).copyAttrs(tree)
-    def Import(tree: Tree, expr: Tree, selectors: List[(Name, Name)]) =
+    def Import(tree: Tree, expr: Tree, selectors: List[ImportSelector]) =
       new Import(expr, selectors).copyAttrs(tree)
-    def DocDef(tree: Tree, comment: String, definition: Tree) =
+    def DocDef(tree: Tree, comment: DocComment, definition: Tree) =
       new DocDef(comment, definition).copyAttrs(tree)
     def Template(tree: Tree, parents: List[Tree], self: ValDef, body: List[Tree]) =
       new Template(parents, self, body).copyAttrs(tree)
@@ -1105,8 +1135,6 @@ trait Trees {
       new Block(stats, expr).copyAttrs(tree)
     def CaseDef(tree: Tree, pat: Tree, guard: Tree, body: Tree) =
       new CaseDef(pat, guard, body).copyAttrs(tree)
-    def Sequence(tree: Tree, trees: List[Tree]) =
-      new Sequence(trees).copyAttrs(tree)
     def Alternative(tree: Tree, trees: List[Tree]) =
       new Alternative(trees).copyAttrs(tree)
     def Star(tree: Tree, elem: Tree) =
@@ -1211,12 +1239,12 @@ trait Trees {
       if (name0 == name) && (params0 == params) && (rhs0 == rhs) => t
       case _ => treeCopy.LabelDef(tree, name, params, rhs)
     }
-    def Import(tree: Tree, expr: Tree, selectors: List[(Name, Name)]) = tree match {
+    def Import(tree: Tree, expr: Tree, selectors: List[ImportSelector]) = tree match {
       case t @ Import(expr0, selectors0)
       if (expr0 == expr) && (selectors0 == selectors) => t
       case _ => treeCopy.Import(tree, expr, selectors)
     }
-    def DocDef(tree: Tree, comment: String, definition: Tree) = tree match {
+    def DocDef(tree: Tree, comment: DocComment, definition: Tree) = tree match {
       case t @ DocDef(comment0, definition0)
       if (comment0 == comment) && (definition0 == definition) => t
       case _ => treeCopy.DocDef(tree, comment, definition)
@@ -1235,11 +1263,6 @@ trait Trees {
       case t @ CaseDef(pat0, guard0, body0)
       if (pat0 == pat) && (guard0 == guard) && (body0 == body) => t
       case _ => treeCopy.CaseDef(tree, pat, guard, body)
-    }
-    def Sequence(tree: Tree, trees: List[Tree]) = tree match {
-      case t @ Sequence(trees0)
-      if trees0 == trees => t
-      case _ => treeCopy.Sequence(tree, trees)
     }
     def Alternative(tree: Tree, trees: List[Tree]) = tree match {
       case t @ Alternative(trees0)
@@ -1456,8 +1479,6 @@ trait Trees {
         treeCopy.Block(tree, transformStats(stats, currentOwner), transform(expr))
       case CaseDef(pat, guard, body) =>
         treeCopy.CaseDef(tree, transform(pat), transform(guard), transform(body))
-      case Sequence(trees) =>
-        treeCopy.Sequence(tree, transformTrees(trees))
       case Alternative(trees) =>
         treeCopy.Alternative(tree, transformTrees(trees))
       case Star(elem) =>
@@ -1552,7 +1573,7 @@ trait Trees {
         else transform(stat)) filter (EmptyTree !=)
     def transformUnit(unit: CompilationUnit) { unit.body = transform(unit.body) }
     def transformModifiers(mods: Modifiers): Modifiers =
-      Modifiers(mods.flags, mods.privateWithin, transformTrees(mods.annotations))
+      Modifiers(mods.flags, mods.privateWithin, transformTrees(mods.annotations), mods.positions)
 
     def atOwner[A](owner: Symbol)(trans: => A): A = {
       val prevOwner = currentOwner
@@ -1609,8 +1630,6 @@ trait Trees {
         traverseTrees(stats); traverse(expr)
       case CaseDef(pat, guard, body) =>
         traverse(pat); traverse(guard); traverse(body)
-      case Sequence(trees) =>
-        traverseTrees(trees) 
       case Alternative(trees) =>
         traverseTrees(trees)
       case Star(elem) =>
@@ -1714,10 +1733,15 @@ trait Trees {
     }
   }
 
-  class TreeTypeSubstituter(val from: List[Symbol], to: List[Type]) extends Traverser {
+  class TreeTypeSubstituter(val from: List[Symbol], val to: List[Type]) extends Traverser {
     val typeSubst = new SubstTypeMap(from, to)
     override def traverse(tree: Tree) {
       if (tree.tpe ne null) tree.tpe = typeSubst(tree.tpe)
+      if (tree.isDef) {
+        val sym = tree.symbol
+        val info1 = typeSubst(sym.info)
+        if (info1 ne sym.info) sym.setInfo(info1)
+      }
       super.traverse(tree)
     }
     override def apply[T <: Tree](tree: T): T = super.apply(tree.duplicate)
@@ -1809,7 +1833,8 @@ trait Trees {
 
   /** resets symbol and tpe fields in a tree, @see ResetAttrsTraverse
    */
-  def resetAttrs[A<:Tree](x:A):A = {new ResetAttrsTraverser().traverse(x); x}
+  def resetAllAttrs[A<:Tree](x:A): A = { new ResetAttrsTraverser().traverse(x); x }
+  def resetLocalAttrs[A<:Tree](x:A): A = { new ResetLocalAttrsTraverser().traverse(x); x }
   
   /** A traverser which resets symbol and tpe fields of all nodes in a given tree
    *  except for (1) TypeTree nodes, whose <code>.tpe</code> field is kept and
@@ -1818,28 +1843,41 @@ trait Trees {
    *
    *  (bq:) This traverser has mutable state and should be discarded after use
    */
-  class ResetAttrsTraverser extends Traverser {
+  private class ResetAttrsTraverser extends Traverser {
+    protected def isLocal(sym: Symbol): Boolean = true
+    protected def resetDef(tree: Tree) {
+      tree.symbol = NoSymbol
+    }
+    override def traverse(tree: Tree): Unit = {
+      tree match {
+        case _: DefTree | Function(_, _) | Template(_, _, _) =>
+          resetDef(tree)
+        case _ =>
+          if (tree.hasSymbol && isLocal(tree.symbol)) tree.symbol = NoSymbol
+      }
+      tree.resetType()
+      super.traverse(tree)
+    }
+  }
+
+  private class ResetLocalAttrsTraverser extends ResetAttrsTraverser {
     private val erasedSyms = new HashSet[Symbol](8)
+    override protected def isLocal(sym: Symbol) = 
+      erasedSyms contains sym
+    override protected def resetDef(tree: Tree) {
+      erasedSyms addEntry tree.symbol
+      super.resetDef(tree)
+    }
     override def traverse(tree: Tree): Unit = tree match {
-      case EmptyTree | TypeTree() =>
-        ;
       case Template(parents, self, body) =>
-        tree.symbol = NoSymbol
-        tree.tpe = null
         for (stat <- body)
           if (stat.isDef) erasedSyms.addEntry(stat.symbol)
         super.traverse(tree)
-      case _: DefTree | Function(_, _) =>
-        erasedSyms.addEntry(tree.symbol)
-        tree.symbol = NoSymbol
-        tree.tpe = null
-        super.traverse(tree)
       case _ =>
-        if (tree.hasSymbol && erasedSyms.contains(tree.symbol)) tree.symbol = NoSymbol
-        tree.tpe = null
         super.traverse(tree)
     }
   }
+
   /* hook to memoize trees in IDE */
   trait TreeKind {
     def isType : Boolean

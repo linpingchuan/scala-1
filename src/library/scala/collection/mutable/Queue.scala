@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -9,10 +9,9 @@
 // $Id$
 
 
-package scala.collection
-package mutable
+package scala.collection.mutable
 
-import scala.collection.generic.{ SequenceFactory, GenericTraversableTemplate, BuilderFactory }
+import scala.collection.{ generic => gen }
 import scala.{ collection => col }
 
 /** <code>Queue</code> objects implement data structures that allow to
@@ -24,9 +23,9 @@ import scala.{ collection => col }
  *  @since   1
  */
 @serializable @cloneable
-class Queue[A] extends Sequence[A] 
-                  with col.LinearSequence[A]
-                  with GenericTraversableTemplate[A, Queue]
+class Queue[A] extends Seq[A] 
+                  with col.LinearSeq[A]
+                  with gen.GenericTraversableTemplate[A, Queue]
                   with LinkedListLike[A, Queue[A]]
                   with Cloneable[Queue[A]] {
 
@@ -82,8 +81,8 @@ class Queue[A] extends Sequence[A]
   def front: A = head
 }
 
-object Queue extends SequenceFactory[Queue] {
-  implicit def builderFactory[A]: BuilderFactory[A, Queue[A], Coll] = new VirtualBuilderFactory[A]
+object Queue extends gen.SeqFactory[Queue] {
+  implicit def canBuildFrom[A]: gen.CanBuildFrom[Coll, A, Queue[A]] = new GenericCanBuildFrom[A]
   def newBuilder[A] = new Builder[A, Queue[A]] {
     var front: Queue[A] = _
     var back: Queue[A] = _

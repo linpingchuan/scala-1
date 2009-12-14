@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2009 LAMP/EPFL
+ * Copyright 2005-2010 LAMP/EPFL
  * @author Martin Odersky
  */
 // $Id$
@@ -10,7 +10,7 @@ package transform
 import symtab._
 import Flags.{ CASE => _, _ }
 import scala.collection.mutable.ListBuffer
-import matching.{ TransMatcher, PatternNodes, ParallelMatching }
+import matching.{ TransMatcher, Patterns, ParallelMatching }
 
 /** This class ...
  *
@@ -19,7 +19,7 @@ import matching.{ TransMatcher, PatternNodes, ParallelMatching }
  */
 abstract class ExplicitOuter extends InfoTransform
       with TransMatcher
-      with PatternNodes
+      with Patterns
       with ParallelMatching
       with TypingTransformers
       with ast.TreeDSL
@@ -122,7 +122,7 @@ abstract class ExplicitOuter extends InfoTransform
     case ClassInfoType(parents, decls, clazz) =>
       var decls1 = decls
       if (isInner(clazz) && !(clazz hasFlag INTERFACE)) {
-        decls1 = newScope(decls.toList)
+        decls1 = new Scope(decls.toList)
         val outerAcc = clazz.newMethod(clazz.pos, nme.OUTER) // 3
         outerAcc expandName clazz
         
@@ -141,7 +141,7 @@ abstract class ExplicitOuter extends InfoTransform
         for (mc <- clazz.mixinClasses) {
           val mixinOuterAcc: Symbol = atPhase(phase.next)(outerAccessor(mc))
           if (mixinOuterAcc != NoSymbol) {
-            if (decls1 eq decls) decls1 = newScope(decls.toList)
+            if (decls1 eq decls) decls1 = new Scope(decls.toList)
             val newAcc = mixinOuterAcc.cloneSymbol(clazz) 
             newAcc resetFlag DEFERRED setInfo (clazz.thisType memberType mixinOuterAcc)
             decls1 enter newAcc
@@ -361,7 +361,7 @@ abstract class ExplicitOuter extends InfoTransform
           val gdcall = 
             if (guard == EmptyTree) EmptyTree
             else {
-              val vs       = definedVars(p)
+              val vs       = Pattern(p).deepBoundVariables
               val guardDef = makeGuardDef(vs, guard)
               nguard       += transform(guardDef) // building up list of guards
               
@@ -386,7 +386,7 @@ abstract class ExplicitOuter extends InfoTransform
       }
 
       val t = atPos(tree.pos) {
-        val context     = MatchMatrixContext(transform, localTyper, currentOwner, tree.tpe)
+        val context     = MatrixContext(transform, localTyper, currentOwner, tree.tpe)
         val t_untyped   = handlePattern(nselector, ncases, checkExhaustive, context)
         
         /* if @switch annotation is present, verify the resulting tree is a Match */
@@ -396,7 +396,7 @@ abstract class ExplicitOuter extends InfoTransform
             unit.error(tree.pos, "could not emit switch for @switch annotated match")
         }
         
-        localTyper.typed(t_untyped, context.resultType) 
+        localTyper.typed(t_untyped, context.matchResultType) 
       }
 
       if (nguard.isEmpty) t
@@ -460,19 +460,19 @@ abstract class ExplicitOuter extends InfoTransform
             sym setFlag notPROTECTED
           super.transform(tree)
 
-        case Apply(sel @ Select(qual, name), args)
-          if (name == nme.CONSTRUCTOR && isInner(sel.symbol.owner)) =>
-            val outerVal = atPos(tree.pos) {
-              if (qual.isInstanceOf[This]) { // it's a call between constructors of same class
-                assert(outerParam != NoSymbol)
-                outerValue
-              } else {
-                var pre = qual.tpe.prefix
-                if (pre == NoPrefix) pre = sym.owner.outerClass.thisType
-                gen.mkAttributedQualifier(pre)
-              }
-            }
-            super.transform(treeCopy.Apply(tree, sel, outerVal :: args))
+        case Apply(sel @ Select(qual, name), args) if (name == nme.CONSTRUCTOR && isInner(sel.symbol.owner)) =>
+          val outerVal = atPos(tree.pos)(qual match {
+            // it's a call between constructors of same class
+            case _: This  => 
+              assert(outerParam != NoSymbol)
+              outerValue
+            case _        =>
+              gen.mkAttributedQualifier(qual.tpe.prefix match {
+                case NoPrefix => sym.owner.outerClass.thisType
+                case x        => x
+              })
+          })
+          super.transform(treeCopy.Apply(tree, sel, outerVal :: args))
 
         // TransMatch hook
         case mch: Match =>
@@ -490,6 +490,7 @@ abstract class ExplicitOuter extends InfoTransform
     override def transformUnit(unit: CompilationUnit) {
       cunit = unit
       atPhase(phase.next) { super.transformUnit(unit) }
+      cunit = null
     }
   }
 

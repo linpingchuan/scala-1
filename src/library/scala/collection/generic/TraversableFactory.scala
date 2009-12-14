@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2006-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2006-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -18,8 +18,9 @@ package generic
 abstract class TraversableFactory[CC[X] <: Traversable[X] with GenericTraversableTemplate[X, CC]]
   extends GenericCompanion[CC] {
 
-  class VirtualBuilderFactory[A] extends BuilderFactory[A, CC[A], CC[_]] {
+  class GenericCanBuildFrom[A] extends CanBuildFrom[CC[_], A, CC[A]] {
     def apply(from: Coll) = from.genericBuilder[A] 
+    def apply() = newBuilder[A]
   }
 
   /** Concatenate all the argument collections into a single collection.

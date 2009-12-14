@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2009 LAMP/EPFL
+ * Copyright 2005-2010 LAMP/EPFL
  * @author  Martin Odersky
  */
 // $Id$
@@ -268,8 +268,6 @@ trait StdNames {
     val assume_ = newTermName("assume")
     val asInstanceOf_ = newTermName("asInstanceOf")
     val box = newTermName("box")
-    val boxArray = newTermName("boxArray")
-    val forceBoxedArray = newTermName("forceBoxedArray")
     val canEqual_ = newTermName("canEqual")
     val checkInitialized = newTermName("checkInitialized")
     val classOf = newTermName("classOf")
@@ -282,7 +280,7 @@ trait StdNames {
     val eq = newTermName("eq")
     val equals_ = newTermName("equals")
     val _equals = newTermName("_equals")
-    val _equalsWithVarArgs = newTermName("_equalsWithVarArgs")
+    val inlinedEquals = newTermName("inlinedEquals")
     val error = newTermName("error")
     val ex = newTermName("ex")
     val add_ = newTermName("add")
@@ -331,7 +329,7 @@ trait StdNames {
     val tail = newTermName("tail")
     val toArray = newTermName("toArray")
     val toList = newTermName("toList")
-    val toSequence = newTermName("toSequence")
+    val toSeq = newTermName("toSeq")
     val toString_ = newTermName("toString")
     val clone_ = newTermName("clone")
     val this_ = newTermName("this")
@@ -344,6 +342,7 @@ trait StdNames {
     val value = newTermName("value")
     val view_ = newTermName("view")
     val wait_ = newTermName("wait")
+    val withFilter = newTermName("withFilter")
     val zip = newTermName("zip")
 
     val ZAND = encode("&&")

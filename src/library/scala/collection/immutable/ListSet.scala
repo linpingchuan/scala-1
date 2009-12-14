@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -19,7 +19,7 @@ import generic._
  *  @since 1
  */
 object ListSet extends SetFactory[ListSet] {
-  implicit def builderFactory[A]: BuilderFactory[A, ListSet[A], Coll] = setBuilderFactory[A]
+  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, ListSet[A]] = setCanBuildFrom[A]
   override def empty[A] = new ListSet[A]
 }
 

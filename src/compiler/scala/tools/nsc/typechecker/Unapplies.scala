@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2009 LAMP/EPFL
+ * Copyright 2005-2010 LAMP/EPFL
  * @author  Martin Odersky
  */
 // $Id$
@@ -91,6 +91,12 @@ trait Unapplies extends ast.TreeDSL
   def unapplyMember(tp: Type): Symbol = (tp member nme.unapply) match {
     case NoSymbol => tp member nme.unapplySeq
     case unapp    => unapp
+  }
+  /** returns unapply member's parameter type. */
+  def unapplyParameterType(extractor: Symbol) = {
+    val tps = extractor.tpe.paramTypes
+    if (tps.length == 1) tps.head.typeSymbol
+    else NoSymbol
   }
 
   def copyUntyped[T <: Tree](tree: T): T =

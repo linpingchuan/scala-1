@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2006-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2006-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -31,9 +31,11 @@ import scala.reflect.Manifest
 @SerialVersionUID(0 - 8525408645367278351L)
 final class StringBuilder(initCapacity: Int, private val initValue: String)
       extends Builder[Char, String]
-         with Vector[Char] {
+         with IndexedSeq[Char] {
 
   require(initCapacity >= 0)
+
+  import scala.collection.Seq
 
   /** The value is used for character storage. */
   private var array = new Array[Char](initCapacity + initValue.length)
@@ -113,7 +115,7 @@ final class StringBuilder(initCapacity: Int, private val initValue: String)
    */
   def ensureCapacity(n: Int) {
     if (n > array.length) {
-      var newsize = array.length * 2
+      var newsize = (array.length * 2) max 1
       while (n > newsize)
         newsize = newsize * 2
       val newar = new Array[Char](newsize)
@@ -725,7 +727,7 @@ final class StringBuilder(initCapacity: Int, private val initValue: String)
    *    specified substring, starting at the specified index. The integer
    *    returned is the smallest value <code>k</code> for which:
    *  </p><pre>
-   *    k >= Math.min(fromIndex, str.length()) &&
+   *    k >= math.min(fromIndex, str.length()) &&
    *                   this.toString().startsWith(str, k)</pre>
    *  <p>
    *    If no such value of <code>k</code> exists, then <code>-1</code>
@@ -737,7 +739,7 @@ final class StringBuilder(initCapacity: Int, private val initValue: String)
    *  @return           the index within this string of the first occurrence
    *                    of the specified substring, starting at the specified index.
    */
-  def indexOf(str: String, fromIndex: Int): Int = indexOfSeq(str.toVector, fromIndex)
+  def indexOf(str: String, fromIndex: Int): Int = indexOfSlice(str.toIndexedSeq, fromIndex)
 
   /** <p>
    *    Returns the index within this string of the rightmost occurrence
@@ -766,7 +768,7 @@ final class StringBuilder(initCapacity: Int, private val initValue: String)
    *    specified substring. The integer returned is the largest value
    *    <code>k</code> such that:
    *  </p><pre>val
-   *    k <= Math.min(fromIndex, str.length()) &&
+   *    k <= math.min(fromIndex, str.length()) &&
    *                   this.toString().startsWith(str, k)</pre>
    *  <p>
    *    If no such value of <code>k</code> exists, then <code>-1</code>
@@ -778,7 +780,7 @@ final class StringBuilder(initCapacity: Int, private val initValue: String)
    *  @return            the index within this sequence of the last occurrence
    *                     of the specified substring.
    */
-  def lastIndexOf(str: String, fromIndex: Int): Int = lastIndexOfSeq(str.toVector, fromIndex)
+  def lastIndexOf(str: String, fromIndex: Int): Int = lastIndexOfSlice(str.toIndexedSeq, fromIndex)
 
   /** <p>
    *    Causes this character sequence to be replaced by the reverse of the
@@ -850,7 +852,7 @@ object StringBuilder
   // method <code>java.util.Arrays.copyOf</code> exists since 1.6
   private def copyOf(src: Array[Char], newLength: Int): Array[Char] = {
     val dest = new Array[Char](newLength)
-    arraycopy(src, 0, dest, 0, Math.min(src.length, newLength))
+    arraycopy(src, 0, dest, 0, src.length min newLength)
     dest
   }
 }

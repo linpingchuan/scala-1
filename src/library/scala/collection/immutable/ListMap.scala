@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -19,8 +19,8 @@ import generic._
  *  @since 1
  */
 object ListMap extends ImmutableMapFactory[ListMap] {
-  implicit def builderFactory[A, B]: BuilderFactory[(A, B), ListMap[A, B], Coll] =
-    new MapBuilderFactory[A, B]
+  implicit def canBuildFrom[A, B]: CanBuildFrom[Coll, (A, B), ListMap[A, B]] =
+    new MapCanBuildFrom[A, B]
   def empty[A, B]: ListMap[A, B] = new ListMap
 }
 

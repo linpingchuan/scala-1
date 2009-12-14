@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2009 LAMP/EPFL
+ * Copyright 2005-2010 LAMP/EPFL
  * @author  Martin Odersky
  */
 // $Id$
@@ -7,7 +7,7 @@
 package scala.tools.nsc
 package util
 
-import scala.tools.nsc.util.SourceFile.{LF, FF, CR, SU}
+import Chars.{LF, FF, CR, SU}
 
 abstract class CharArrayReader { self =>
 
@@ -104,5 +104,7 @@ abstract class CharArrayReader { self =>
     ch = self.ch
     override def decodeUni = self.decodeUni
     def error(offset: Int, msg: String) = self.error(offset, msg)
-  } 
+    /** A mystery why CharArrayReader.nextChar() returns Unit */
+    def getc() = { nextChar() ; ch }
+  }
 }

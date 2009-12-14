@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2009 LAMP/EPFL
+ * Copyright 2005-2010 LAMP/EPFL
  * @author  Martin Odersky
  */
 // $Id$
@@ -10,8 +10,10 @@ package classfile
 
 import java.lang.{Float, Double}
 import scala.tools.nsc.util.{Position, NoPosition, ShowPickled}
+import scala.collection.mutable.Set
 import Flags._
 import PickleFormat._
+
 
 /**
  * Serialize a top-level module and/or class.
@@ -51,15 +53,6 @@ abstract class Pickler extends SubComponent {
             add(sym, pickle)
             add(sym.linkedSym, pickle)
             pickle.finish
-            // pickleHash is used to track changes in a signature (-> IDE)
-            val doPickleHash = global.doPickleHash
-            if (doPickleHash) {
-              var i = 0
-              while (i < pickle.writeIndex) {
-                unit.pickleHash += pickle.bytes(i).toLong // toLong needed to work around bug
-                i += 1
-              }
-            }
           case _ =>
         }
       }
@@ -74,26 +67,33 @@ abstract class Pickler extends SubComponent {
     private var ep = 0
     private val index = new LinkedHashMap[AnyRef, Int]
 
+    // collect higher-order type params
+    private var locals: Set[Symbol] = Set()
+
 //    private var boundSyms: List[Symbol] = Nil
+
+    private def isRootSym(sym: Symbol) = 
+      sym.name.toTermName == rootName && sym.owner == rootOwner
 
     /** Returns usually symbol's owner, but picks classfile root instead
      *  for existentially bound variables that have a non-local owner.
      *  Question: Should this be done for refinement class symbols as well?
      */
     private def localizedOwner(sym: Symbol) = 
-      if (sym.isAbstractType && sym.hasFlag(EXISTENTIAL) && !isLocal(sym.owner)) root 
+      if (isLocal(sym) && !isRootSym(sym) && !isLocal(sym.owner)) root 
       else sym.owner
 
     /** Is root in symbol.owner*, or should it be treated as a local symbol
-     *  anyway? This is the case if symbol is a refinement class or
-     *  an existentially bound variable.
+     *  anyway? This is the case if symbol is a refinement class,
+     *  an existentially bound variable, or a higher-order type parameter.
      */
     private def isLocal(sym: Symbol): Boolean =
-      !sym.isPackageClass &&
-      (sym.name.toTermName == rootName && sym.owner == rootOwner ||
-       sym != NoSymbol && isLocal(sym.owner) ||
+      !sym.isPackageClass && sym != NoSymbol &&
+      (isRootSym(sym) ||
        sym.isRefinementClass ||
-       sym.isAbstractType && sym.hasFlag(EXISTENTIAL))
+       sym.isAbstractType && sym.hasFlag(EXISTENTIAL) || // existential param
+       (locals contains sym) || // higher-order type param
+       isLocal(sym.owner))
 
     private def staticAnnotations(annots: List[AnnotationInfo]) =
       annots filter(ann =>
@@ -194,9 +194,12 @@ abstract class Pickler extends SubComponent {
         case MethodType(params, restpe) =>
           putType(restpe); putSymbols(params)
         case PolyType(tparams, restpe) =>
+          tparams foreach { tparam => 
+            if (!isLocal(tparam)) locals += tparam // similar to existential types, these tparams are local
+          }
           putType(restpe); putSymbols(tparams)
         case ExistentialType(tparams, restpe) =>
-//          val savedBoundSyms = boundSyms
+//          val savedBoundSyms = boundSyms // boundSyms are known to be local based on the EXISTENTIAL flag  (see isLocal)
 //          boundSyms = tparams ::: boundSyms
 //          try {
             putType(restpe); 
@@ -265,7 +268,7 @@ abstract class Pickler extends SubComponent {
 
         case Import(expr, selectors) =>
           putTree(expr)
-          for ((from,to) <- selectors) {
+          for (ImportSelector(from, _, to, _) <- selectors) {
             putEntry(from)
             putEntry(to)
           }
@@ -288,9 +291,6 @@ abstract class Pickler extends SubComponent {
           putTree(pat)
           putTree(guard)
           putTree(body)
-
-        case Sequence(trees) =>
-          putTrees(trees)
 
         case Alternative(trees) =>
           putTrees(trees)
@@ -405,17 +405,14 @@ abstract class Pickler extends SubComponent {
       }
     }
 
-    private def putTrees(trees: List[Tree]) =
-      trees.foreach(putTree _)
-
-    private def putTreess(treess: List[List[Tree]]) =
-      treess.foreach(putTrees _)
+    private def putTrees(trees: List[Tree]) = trees foreach putTree
+    private def putTreess(treess: List[List[Tree]]) = treess foreach putTrees
 
     /** only used when pickling trees, i.e. in an
      *  argument of some Annotation */
     private def putMods(mods: Modifiers) = if (putEntry(mods)) {
       // annotations in Modifiers are removed by the typechecker
-      val Modifiers(flags, privateWithin, Nil) = mods
+      val Modifiers(flags, privateWithin, Nil, _) = mods
       putEntry(privateWithin)
     }
 
@@ -489,6 +486,10 @@ abstract class Pickler extends SubComponent {
      */
     private def writeRef(ref: AnyRef) { writeNat(index(ref)) }
     private def writeRefs(refs: List[AnyRef]) { refs foreach writeRef }
+    private def writeRefsWithLength(refs: List[AnyRef]) { 
+      writeNat(refs.length)
+      writeRefs(refs)
+    }
 
     /** Write name, owner, flags, and info of a symbol.
      */
@@ -626,9 +627,9 @@ abstract class Pickler extends SubComponent {
           args foreach writeClassfileAnnotArg
           ANNOTARGARRAY
 
-        case (target: Symbol, children: List[Symbol]) =>
+        case (target: Symbol, children: List[_]) =>
           writeRef(target)
-          for (c <- children) writeRef(c.asInstanceOf[Symbol])
+          writeRefs(children.asInstanceOf[List[Symbol]])
           CHILDREN
 
         case EmptyTree =>
@@ -679,13 +680,9 @@ abstract class Pickler extends SubComponent {
           writeRef(tree.symbol)
           writeRef(mods)
           writeRef(name)
-          writeNat(tparams.length)
-          writeRefs(tparams)
+          writeRefsWithLength(tparams)
           writeNat(vparamss.length)
-          for(vparams <- vparamss) {
-            writeNat(vparams.length)
-            writeRefs(vparams)
-          }
+          vparamss foreach writeRefsWithLength
           writeRef(tpt)
           writeRef(rhs)
           TREE
@@ -714,7 +711,7 @@ abstract class Pickler extends SubComponent {
           writeRef(tree.tpe)
           writeRef(tree.symbol)
           writeRef(expr)
-          for ((from, to) <- selectors) {
+          for (ImportSelector(from, _, to, _) <- selectors) {
             writeRef(from)
             writeRef(to)
           }
@@ -731,8 +728,7 @@ abstract class Pickler extends SubComponent {
           writeNat(TEMPLATEtree)
           writeRef(tree.tpe)
           writeRef(tree.symbol)
-          writeNat(parents.length)
-          writeRefs(parents)
+          writeRefsWithLength(parents)
           writeRef(self)
           writeRefs(body)
           TREE
@@ -750,12 +746,6 @@ abstract class Pickler extends SubComponent {
           writeRef(pat)
           writeRef(guard)
           writeRef(body)
-          TREE
-
-        case tree@Sequence(trees) =>
-          writeNat(SEQUENCEtree)
-          writeRef(tree.tpe)
-          writeRefs(trees)
           TREE
 
         case tree@Alternative(trees) =>
@@ -791,7 +781,6 @@ abstract class Pickler extends SubComponent {
           writeRef(elemtpt)
           writeRefs(trees)
           TREE
-
 
         case tree@Function(vparams, body) =>
           writeNat(FUNCTIONtree)
@@ -967,7 +956,7 @@ abstract class Pickler extends SubComponent {
           writeRefs(whereClauses)
           TREE
 
-        case Modifiers(flags, privateWithin, _) =>
+        case Modifiers(flags, privateWithin, _, _) =>
           val pflags = rawFlagsToPickled(flags)
           writeNat((pflags >> 32).toInt)
           writeNat((pflags & 0xFFFFFFFF).toInt)

@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -11,9 +11,9 @@
 
 package scala.collection
 
-import mutable.{Buffer, ArrayBuffer, ListBuffer}
-import annotation.{ tailrec, experimental }
-// import immutable.{List, Nil, ::, Stream}
+import mutable.{Buffer, ArrayBuffer, ListBuffer, StringBuilder}
+import immutable.{List, Stream}
+import annotation.{ tailrec }
 
 /** The <code>Iterator</code> object provides various functions for
  *  creating specialized iterators.
@@ -46,14 +46,6 @@ object Iterator {
    *  @param elems  The elements returned one-by-one from the iterator
    */
   def apply[A](elems: A*): Iterator[A] = elems.iterator
-
-  /** Concatenates the given argument iterators into a single iterator.
-   *
-   *  @param its the argument iterators that are to be concatenated
-   *  @return the concatenation of all the argument iterators
-   */
-  @deprecated("use <code>++</code>")
-  def concat[A](xss: Iterator[A]*): Iterator[A] = xss.iterator.flatten
 
   /** An iterator that returns the results of some element computation a number of times.
    *  @param   len  The number of elements returned
@@ -172,7 +164,7 @@ object Iterator {
 
   /**
    *  @param xs the array of elements
-   *  @see also: Vector.iterator and slice
+   *  @see also: IndexedSeq.iterator and slice
    */
   @deprecated("use `xs.iterator' instead")
   def fromArray[a](xs: Array[a]): Iterator[a] =
@@ -182,18 +174,11 @@ object Iterator {
    *  @param xs     the array of elements
    *  @param start  the start index
    *  @param length  the length
-   *  @see also: Vector.iterator and slice
+   *  @see also: IndexedSeq.iterator and slice
    */
   @deprecated("use `xs.slice(start, start + length).iterator' instead")
   def fromArray[a](xs: Array[a], start: Int, length: Int): Iterator[a] =
     xs.slice(start, start + length).iterator
-
-  /**
-   *  @param str the given string
-   *  @return    the iterator on <code>str</code>
-   */
-  @deprecated("replaced by <code>str.iterator</code>")
-  def fromString(str: String): Iterator[Char] = str.iterator
 
   /**
    *  @param n the product arity
@@ -330,10 +315,17 @@ trait Iterator[+A] { self =>
   /** Returns a new iterator that first yields the elements of this
    *  iterator followed by the elements provided by iterator <code>that</code>.
    */
-  def ++[B >: A](that: => Iterator[B]) = new Iterator[B] {
+  def ++[B >: A](that: => Iterator[B]): Iterator[B] = new Iterator[B] {
     // optimize a little bit to prevent n log n behavior.
-    var cur : Iterator[B] = self 
-    def hasNext = cur.hasNext || (cur eq self) && { cur = that; hasNext }
+    private var cur : Iterator[B] = self 
+    // this was unnecessarily looping forever on x ++ x
+    def hasNext = cur.hasNext || ((cur eq self) && {
+      val it = that
+      it.hasNext && {
+        cur = it
+        true
+      }
+    })
     def next() = { hasNext; cur.next() }
   }
 
@@ -359,14 +351,68 @@ trait Iterator[+A] { self =>
    *  @param p the predicate used to filter the iterator.
    *  @return  the elements of this iterator satisfying <code>p</code>.
    */
-  def filter(p: A => Boolean): Iterator[A] = {
-    val self = buffered
-    new Iterator[A] {
-      private def skip() = while (self.hasNext && !p(self.head)) self.next()
-      def hasNext = { skip(); self.hasNext }
-      def next() = { skip(); self.next() }
+  def filter(p: A => Boolean): Iterator[A] = new Iterator[A] {
+    private var hd: A = _
+    private var hdDefined: Boolean = false
+    
+    def hasNext: Boolean = hdDefined || {
+      do {
+        if (!self.hasNext) return false
+        hd = self.next()
+      } while (!p(hd))
+      hdDefined = true
+      true
     }
+    
+    def next() = if (hasNext) { hdDefined = false; hd } else empty.next()
   }
+
+  def withFilter(p: A => Boolean): WithFilter = new WithFilter(p)
+  
+  final class WithFilter private[Iterator] (p: A => Boolean) {
+	
+    def map[B](f: A => B): Iterator[B] = new Iterator[B] {
+      private var hd: A = _
+      private var hdDefined: Boolean = false
+      
+      def hasNext: Boolean = hdDefined || {
+        do {
+          if (!self.hasNext) return false
+          hd = self.next()
+        } while (!p(hd))
+        hdDefined = true
+        true
+      }
+      
+      def next() = if (hasNext) { hdDefined = false; f(hd) } else empty.next()
+    }
+
+    def flatMap[B](f: A => Iterator[B]): Iterator[B] = new Iterator[B] {
+      private var cur: Iterator[B] = empty
+      
+      @tailrec
+      def hasNext: Boolean = cur.hasNext || {
+        var x = null.asInstanceOf[A]
+        do {
+          if (!self.hasNext) return false
+          x = self.next()
+        } while (!p(x))
+        cur = f(x)
+        hasNext
+      }
+
+      def next(): B = (if (hasNext) cur else empty).next() 
+    }
+
+    def foreach[U](f: A => U) {
+      while (self.hasNext) {
+        val x = self.next()
+        if (p(x)) f(x)
+      }
+    }
+
+    def withFilter(q: A => Boolean): WithFilter = new WithFilter(x => p(x) && q(x))
+  }  
   
   /** Returns an iterator over all the elements of this iterator which
    *  do not satisfy the predicate <code>p</code>.
@@ -384,8 +430,7 @@ trait Iterator[+A] { self =>
   *  @param pf the partial function which filters and maps the iterator.
   *  @return the new iterator.
   */
-  @experimental
-  def filterMap[B](pf: PartialFunction[Any, B]): Iterator[B] = {
+  def partialMap[B](pf: PartialFunction[A, B]): Iterator[B] = {
     val self = buffered
     new Iterator[B] {
       private def skip() = while (self.hasNext && !pf.isDefinedAt(self.head)) self.next()
@@ -401,12 +446,18 @@ trait Iterator[+A] { self =>
    *  @param p the predicate used to filter the iterator.
    *  @return  the longest prefix of this iterator satisfying <code>p</code>.
    */
-  def takeWhile(p: A => Boolean): Iterator[A] = {
-    val self = buffered
-    new Iterator[A] {
-      def hasNext = { self.hasNext && p(self.head) }
-      def next() = (if (hasNext) self else empty).next()
+  def takeWhile(p: A => Boolean): Iterator[A] = new Iterator[A] {
+    private var hd: A = _
+    private var hdDefined: Boolean = false
+    private var tail: Iterator[A] = self
+  
+    def hasNext = hdDefined || tail.hasNext && {
+      hd = tail.next()
+      if (p(hd)) hdDefined = true 
+      else tail = Iterator.empty
+      hdDefined
     }
+    def next() = if (hasNext) { hdDefined = false; hd } else empty.next()
   }
 
   /** Partitions this iterator in two iterators according to a predicate.
@@ -584,7 +635,22 @@ trait Iterator[+A] { self =>
     }
     res
   }
-  
+
+  /** Applies option-valued function to successive elements of this iterator
+   *  until a defined value is found.
+   *
+   *  @param f    the function to be applied to successive elements.
+   *  @return     an option value containing the first defined result of
+   *              `f`, or `None` if `f` returns `None` for all all elements.
+  def mapFind[B](f: A => Option[B]): Option[B] = {
+    var res: Option[B] = None
+    while (res.isEmpty && hasNext) {
+      res = f(next())
+    }
+    res
+  }
+   */
+
   /** Returns index of the first element satisfying a predicate, or -1.
    *
    *  @note may not terminate for infinite-sized collections.
@@ -752,7 +818,7 @@ trait Iterator[+A] { self =>
    *  understand) this method takes the way one might expect, leaving
    *  the original iterator with 'size' fewer elements.
    */
-  private def takeDestructively(size: Int): Sequence[A] = {
+  private def takeDestructively(size: Int): Seq[A] = {
     val buf = new ArrayBuffer[A]
     var i = 0
     while (self.hasNext && i < size) {
@@ -763,12 +829,12 @@ trait Iterator[+A] { self =>
   }
   
   /** A flexible iterator for transforming an <code>Iterator[A]</code> into an
-   *  Iterator[Sequence[A]], with configurable sequence size, step, and
+   *  Iterator[Seq[A]], with configurable sequence size, step, and
    *  strategy for dealing with elements which don't fit evenly.
    * 
    *  Typical uses can be achieved via methods `grouped' and `sliding'.
    */
-  class GroupedIterator[B >: A](self: Iterator[A], size: Int, step: Int) extends Iterator[Sequence[B]] {
+  class GroupedIterator[B >: A](self: Iterator[A], size: Int, step: Int) extends Iterator[Seq[B]] {
     require(size >= 1 && step >= 1)
 
     private[this] var buffer: ArrayBuffer[B] = ArrayBuffer()  // the buffer    
@@ -1008,10 +1074,24 @@ trait Iterator[+A] { self =>
    *
    *  @return  A sequence which enumerates all elements of this iterator.
    */ 
-  def toSequence: Sequence[A] = {
+  def toSeq: Seq[A] = {
     val buffer = new ArrayBuffer[A]
     this copyToBuffer buffer
     buffer 
+  }
+  
+  /** Checks if the other iterator contains the same elements as this one.
+   *
+   *  @note will not terminate for infinite-sized iterators.
+   *  @param that  the other iterator
+   *  @return true, iff both iterators contain the same elements in the same order.
+   */
+  def sameElements(that: Iterator[_]): Boolean = {    
+    while (hasNext && that.hasNext)
+      if (next != that.next)
+        return false
+    
+    !hasNext && !that.hasNext
   }
   
   /** Returns a string representation of the elements in this iterator. The resulting string
@@ -1083,10 +1163,7 @@ trait Iterator[+A] { self =>
    *  iterator followed by the elements provided by iterator <code>that</code>.
    */
   @deprecated("use <code>++</code>")
-  def append[B >: A](that: Iterator[B]) = new Iterator[B] {
-    def hasNext = self.hasNext || that.hasNext
-    def next() = (if (self.hasNext) self else that).next()
-  }
+  def append[B >: A](that: Iterator[B]) = self ++ that
 
   /** Returns index of the first element satisfying a predicate, or -1. */
   @deprecated("use `indexWhere` instead")
@@ -1096,8 +1173,8 @@ trait Iterator[+A] { self =>
    *
    * @return  a sequence which enumerates all elements of this iterator.
    */
-  @deprecated("use toSequence instead")
-  def collect: Sequence[A] = toSequence
+  @deprecated("use toSeq instead")
+  def collect: Seq[A] = toSeq
 
   /** Returns a counted iterator from this iterator.
    */

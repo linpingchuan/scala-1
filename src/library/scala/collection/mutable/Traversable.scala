@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -34,8 +34,7 @@ trait Traversable[A] extends scala.collection.Traversable[A]
  *  @version 2.8
  */
 object Traversable extends TraversableFactory[Traversable] {
-  implicit def builderFactory[A]: BuilderFactory[A, Traversable[A], Coll] =
-    new VirtualBuilderFactory[A]
+  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, Traversable[A]] = new GenericCanBuildFrom[A]
   def newBuilder[A]: Builder[A, Traversable[A]] = new ArrayBuffer
 }
 

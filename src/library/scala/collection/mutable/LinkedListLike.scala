@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |                                         **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -26,7 +26,7 @@ import scala.{ collection => col }
  *  @since   2.8
  */
 trait LinkedListLike[A, This >: Null <: LinkedListLike[A, This]]
-      extends LinearSequenceLike[A, This] {
+      extends LinearSeqLike[A, This] {
   self: This =>
   
 

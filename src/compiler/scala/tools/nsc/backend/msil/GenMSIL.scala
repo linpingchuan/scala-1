@@ -1,5 +1,5 @@
 /* NSC -- new scala compiler
- * Copyright 2005-2009 LAMP/EPFL
+ * Copyright 2005-2010 LAMP/EPFL
  * @author Nikolay Mihaylov
  */
 
@@ -11,15 +11,13 @@ package backend.msil
 import java.io.{File, IOException}
 import java.nio.{ByteBuffer, ByteOrder}
 
-import scala.collection.mutable.{Map, HashMap, HashSet, Stack}
+import scala.collection.mutable.{Map, HashMap, HashSet, Stack, ListBuffer}
 import scala.tools.nsc.symtab._
 import scala.tools.nsc.util.Position
 
 import ch.epfl.lamp.compiler.msil.{Type => MsilType, _}
 import ch.epfl.lamp.compiler.msil.emit._
 
-/**
- */
 abstract class GenMSIL extends SubComponent {
   import global._
   import loaders.clrTypes
@@ -75,7 +73,7 @@ abstract class GenMSIL extends SubComponent {
     import clrTypes.{VOID => MVOID, BOOLEAN => MBOOL, UBYTE => MBYTE, SHORT => MSHORT,
                    CHAR => MCHAR, INT => MINT, LONG => MLONG, FLOAT => MFLOAT,
                    DOUBLE => MDOUBLE, OBJECT => MOBJECT, STRING => MSTRING,
-                   STRING_ARRAY => MSTRING_ARRAY, SCALA_SYMTAB_ATTR => SYMTAB_ATTRIBUTE,
+                   STRING_ARRAY => MSTRING_ARRAY,
                    SYMTAB_CONSTR => SYMTAB_ATTRIBUTE_CONSTRUCTOR,
                    SYMTAB_DEFAULT_CONSTR => SYMTAB_ATTRIBUTE_EMPTY_CONSTRUCTOR}
 
@@ -118,7 +116,7 @@ abstract class GenMSIL extends SubComponent {
     val toDouble: MethodInfo = SystemConvert.GetMethod("ToDouble", objParam)
 
     //val boxedUnit: FieldInfo = msilType(definitions.BoxedUnitModule.info).GetField("UNIT")
-    val boxedUnit: FieldInfo = fields(definitions.BoxedUnit_UNIT.asInstanceOf[clrTypes.global.Symbol])
+    val boxedUnit: FieldInfo = fields(definitions.BoxedUnit_UNIT)
 
     // Scala attributes
     // symtab.Definitions -> object (singleton..)
@@ -133,8 +131,8 @@ abstract class GenMSIL extends SubComponent {
     val dynToStatMapped: HashSet[Symbol] = new HashSet()
 
     initMappings()
-    // ********************************************************************
-    // Create the mappings
+
+    /** Create the mappings between java and .net classes and methods */
     private def initMappings() {
       mapType(definitions.AnyClass, MOBJECT)
       mapType(definitions.AnyRefClass, MOBJECT)
@@ -208,7 +206,6 @@ abstract class GenMSIL extends SubComponent {
 
     var clasz: IClass = _
     var method: IMethod = _
-    var code: Code = _
 
     var massembly: AssemblyBuilder = _
     var mmodule: ModuleBuilder = _
@@ -231,7 +228,7 @@ abstract class GenMSIL extends SubComponent {
           assemName = assemName.substring(0, assemName.length() - 1)
         } else {
           // assuming filename of first source file
-          assert(firstSourceName.endsWith(".scala"), "Source file doesn't end with .scala")
+          assert(firstSourceName.endsWith(".scala"), firstSourceName)
           assemName = firstSourceName.substring(0, firstSourceName.length() - 6)
         }
       } else {
@@ -245,7 +242,7 @@ abstract class GenMSIL extends SubComponent {
       
       outDir = new File(settings.outdir.value)
 
-      srcPath = new File(settings.sourcepath.value)
+      srcPath = new File(settings.sourcedir.value)
 
       val assemblyName = new AssemblyName()
       assemblyName.Name = assemName
@@ -263,35 +260,44 @@ abstract class GenMSIL extends SubComponent {
      * Form of the custom Attribute parameter (Ecma-335.pdf)
      *      - p. 163 for CustomAttrib Form,
      *      - p. 164 for FixedArg Form (Array and Element) (if array or not is known!)
-     *  !! least significant *byte* first if values longer than one byte !!
+     *  !! least significant byte first if values longer than one byte !!
      *
      * 1: Prolog (unsigned int16, value 0x0001) -> symtab[0] = 0x01, symtab[1] = 0x00
      * 2: FixedArgs (directly the data, get number and types from related constructor)
-     *  2.1: length of the array (unsigned int32, take care on order of the 4 bytes)
+     *  2.1: length of the array (unsigned int32, 4 bytes, least significant first)
      *  2.2: the byte array data
      * 3: NumNamed (unsigned int16, number of named fields and properties, 0x0000)
-     *
-     **/
+     */
     def addSymtabAttribute(sym: Symbol, tBuilder: TypeBuilder) {
-      currentRun.symData.get(sym) match {
-        case Some(pickle) =>
-          val symtab: Array[Byte] = new Array[Byte](pickle.writeIndex + 8)
-          symtab(0) = 1.toByte
-          var size:Int = pickle.writeIndex
-          for (i <- 2 until 6) {
-            symtab(i) = (size & 0xff).toByte
-            size = size >> 8
-          }
+      def addMarker() {
+        val markerSymtab = new Array[Byte](4)
+        markerSymtab(0) = 1.toByte
+        tBuilder.SetCustomAttribute(SYMTAB_ATTRIBUTE_EMPTY_CONSTRUCTOR, markerSymtab)
+      }
 
-          System.arraycopy(pickle.bytes, 0, symtab, 6, pickle.writeIndex)
+      // both conditions are needed (why exactly..?)
+      if (tBuilder.Name.endsWith("$") || sym.isModuleClass) {
+        addMarker()
+      } else {
+        currentRun.symData.get(sym) match {
+          case Some(pickle) =>
+            var size = pickle.writeIndex
+            val symtab = new Array[Byte](size + 8)
+            symtab(0) = 1.toByte
+            for (i <- 2 until 6) {
+              symtab(i) = (size & 0xff).toByte
+              size = size >> 8
+            }
+            System.arraycopy(pickle.bytes, 0, symtab, 6, pickle.writeIndex)
 
-          tBuilder.SetCustomAttribute(SYMTAB_ATTRIBUTE_CONSTRUCTOR, symtab)
+            tBuilder.SetCustomAttribute(SYMTAB_ATTRIBUTE_CONSTRUCTOR, symtab)
 
-          currentRun.symData -= sym
-          currentRun.symData -= sym.linkedSym
-          //log("Generated ScalaSig Attr for " + sym)//debug
-        case _ =>
-          log("Could not find pickle information for " + sym)
+            currentRun.symData -= sym
+            currentRun.symData -= sym.linkedSym
+
+          case _ =>
+            addMarker()
+        }
       }
     }
 
@@ -437,8 +443,8 @@ abstract class GenMSIL extends SubComponent {
 
     def writeAssembly() {
       if (entryPoint != null) {
-        assert(entryPoint.enclClass.isModuleClass, "main-method not defined in a module")
-        val mainMethod = methods(entryPoint.asInstanceOf[clrTypes.global.Symbol])
+        assert(entryPoint.enclClass.isModuleClass, entryPoint.enclClass)
+        val mainMethod = methods(entryPoint)
         val stringArrayTypes: Array[MsilType] = Array(MSTRING_ARRAY)
         val globalMain = mmodule.DefineGlobalMethod(
           "Main", MethodAttributes.Public | MethodAttributes.Static,
@@ -466,7 +472,7 @@ abstract class GenMSIL extends SubComponent {
     private def createTypes() {
       for (sym <- classes.keysIterator) {
         val iclass   = classes(sym)
-        val tBuilder = types(sym.asInstanceOf[clrTypes.global.Symbol]).asInstanceOf[TypeBuilder]
+        val tBuilder = types(sym).asInstanceOf[TypeBuilder]
           
         if (settings.debug.value)
           log("Calling CreatType for " + sym + ", " + tBuilder.toString)
@@ -483,7 +489,7 @@ abstract class GenMSIL extends SubComponent {
       clasz = iclass
 
       val tBuilder = getType(sym).asInstanceOf[TypeBuilder]
-      if (isCloneable(sym)){
+      if (isCloneable(sym)) {
         // FIXME: why there's no nme.clone_ ?
         // "Clone": if the code is non-portable, "Clone" is defined, not "clone"
         // TODO: improve condition (should override AnyRef.clone)
@@ -508,30 +514,14 @@ abstract class GenMSIL extends SubComponent {
       tBuilder.setPosition(line, iclass.cunit.source.file.name)
 
       if (isTopLevelModule(sym)) {
-        if (settings.debug.value)
-          log("TopLevelModule: " + sym)
-        if (sym.linkedClassOfModule == NoSymbol) {
-          if (settings.debug.value)
-            log(" no linked class: " + sym)
+        if (sym.linkedClassOfModule == NoSymbol)
           dumpMirrorClass(sym)
-        } else if (!currentRun.compiles(sym.linkedClassOfModule)) {
-          if (settings.debug.value)
-            log(" not compiling linked class: " + sym)
-          dumpMirrorClass(sym)
-        }
+        else
+          log("No mirror class for module with linked class: " +
+              sym.fullNameString)
       }
 
-      // the pickling info is not written to the module class, but to it's
-      // linked class (the mirror class eventually dumped)
-      if (!(tBuilder.Name.endsWith("$") && sym.isModuleClass)){
-        // think the if inside could be removed, because in this case, addSymtabAttribute is
-        // called in the dumpMirrorClass method
-        addSymtabAttribute(if (isTopLevelModule(sym)) sym.sourceModule else sym, tBuilder)
-
-        // TODO: remove; check the above think:
-        assert(!isTopLevelModule(sym), "can't remove the 'if'")
-      }
-
+      addSymtabAttribute(sym, tBuilder)
       addAttributes(tBuilder, sym.annotations)
 
       if (iclass.symbol != definitions.ArrayClass)
@@ -548,10 +538,10 @@ abstract class GenMSIL extends SubComponent {
       localBuilders.clear
       computeLocalVarsIndex(m)
 
-      if (m.symbol.isClassConstructor){
-        mcode = constructors(m.symbol.asInstanceOf[clrTypes.global.Symbol]).asInstanceOf[ConstructorBuilder].GetILGenerator()
+      if (m.symbol.isClassConstructor) {
+        mcode = constructors(m.symbol).asInstanceOf[ConstructorBuilder].GetILGenerator()
       } else {
-        val mBuilder = methods(m.symbol.asInstanceOf[clrTypes.global.Symbol]).asInstanceOf[MethodBuilder]
+        val mBuilder = methods(m.symbol).asInstanceOf[MethodBuilder]
         if (!mBuilder.IsAbstract())
           try {
             mcode = mBuilder.GetILGenerator()
@@ -570,7 +560,7 @@ abstract class GenMSIL extends SubComponent {
       }
 
       if (mcode != null) {
-        for (local <- m.locals -- m.params) {
+        for (local <- m.locals ; if !(m.params contains local)) {
           if (settings.debug.value)
             log("add local var: " + local + ", of kind " + local.kind)
           val t: MsilType = msilType(local.kind)
@@ -583,643 +573,272 @@ abstract class GenMSIL extends SubComponent {
 
     }
 
-    var linearization: List[BasicBlock] = Nil
-    // a "ret" instruction is needed (which is not present in
-    //  icode) if there's no code after a try-catch block
-    var needAdditionalRet: Boolean = false
+    /** Special linearizer for methods with at least one exception handler. This
+     *  linearizer brings all basic blocks in the right order so that nested
+     *  try-catch and try-finally blocks can be emitted.
+     */
+    val msilLinearizer = new MSILLinearizer()
+
+    val labels: HashMap[BasicBlock, Label] = new HashMap()
 
     def genCode(m: IMethod) {
-      code = m.code
+
+      def makeLabels(blocks: List[BasicBlock]) = {
+        if (settings.debug.value)
+          log("Making labels for: " + method)
+        for (bb <- blocks) labels(bb) = mcode.DefineLabel()
+      }
 
       labels.clear
-      linearization = linearizer.linearize(m)
-      val orderedBlocks = (if (m.exh != Nil) orderBlocksForExh(linearization, m.exh)
-                           else linearization)
 
-      makeLabels(orderedBlocks) // orderBlocksForExh may create new Blocks -> new Labels
-      genBlocks(orderedBlocks)
-      if (needAdditionalRet) {
-        mcode.Emit(OpCodes.Ret)
-        needAdditionalRet = false
-      }
+      var linearization = if(m.exh != Nil) msilLinearizer.linearize(m)
+                          else linearizer.linearize(m)
+
+      if (m.exh != Nil)
+        linearization = computeExceptionMaps(linearization, m)
+
+      makeLabels(linearization)
+
+      genBlocks(linearization)
+
+      beginExBlock.clear()
+      beginCatchBlock.clear()
+      endExBlock.clear()
+      omitJumpBlocks.clear()
     }
 
-    abstract class ExHInstruction(handler: ExceptionHandler) { }
-    case class BeginExceptionBlock(handler: ExceptionHandler) extends ExHInstruction(handler)
-    case class BeginCatchBlock(handler: ExceptionHandler, exceptionType: MsilType) extends ExHInstruction(handler)
-    case class BeginFinallyBlock(handler: ExceptionHandler) extends ExHInstruction(handler)
-    case class EndExceptionBlock(handler: ExceptionHandler) extends ExHInstruction(handler)
-
-
-    abstract class Block {
-      var closed: Boolean = false
-      def parentBlockList: Option[BlockList0]
-      def firstBasicBlock: BasicBlock
-      def lastBasicBlock: BasicBlock
-//      def getExceptionBlock(exh: ExceptionHandler): Option[ExceptionBlock]
-      def close(): Unit
-/*      protected def findExceptionBlock(list: List[Block], exh: ExceptionHandler): Option[ExceptionBlock] = {
-        var res: Option[ExceptionBlock] = None
-        var i: Int = 0
-        while (i < list.length && res == None) {
-          val b = list(i)
-          val exB = b.getExceptionBlock(exh)
-          exB match {
-            case some: Some[ExceptionBlock] => res = some
-            case None => ()
-          }
-          i = i + 1
-        }
-        res
-      } */
-    }
-    case class CodeBlock(parent: BlockList0) extends Block {
-      var basicBlocks: List[BasicBlock] = Nil
-      def isEmpty = basicBlocks.isEmpty
-      override def firstBasicBlock: BasicBlock = {
-        if(isEmpty) null
-        else {
-          if (closed) basicBlocks.head
-          else basicBlocks.last
-        }
-      }
-      override def lastBasicBlock: BasicBlock = {
-        if(isEmpty) null
-        else {
-          if (closed) basicBlocks.last
-          else basicBlocks.head
-        }
-      }
-      override def parentBlockList = Some(parent)
-//      override def getExceptionBlock(exh: ExceptionHandler): Option[ExceptionBlock] = None
-      override def close() {
-        basicBlocks = basicBlocks.reverse
-        closed = true
-      }
-      override def toString() = {
-        var res = ""
-        res = res + TopBlock.indent + "CodeBlock(" + basicBlocks + ")\n"
-        res
-      }
-    }
-    abstract class BlockList0 extends Block {
-      var blocks: List[Block] = Nil
-      override def firstBasicBlock: BasicBlock = {
-        if(blocks.isEmpty) null
-        else {
-          if (closed) blocks.head.firstBasicBlock
-          else blocks.last.firstBasicBlock
-        }
-      }
-      override def lastBasicBlock: BasicBlock = {
-        if(blocks.isEmpty) null
-        else {
-          if (closed) blocks.last.lastBasicBlock
-          else blocks.head.lastBasicBlock
-        }
-      }
-/*      override def getExceptionBlock(exh: ExceptionHandler): Option[ExceptionBlock] = {
-        findExceptionBlock(blocks, exh)
-      } */
-      def addExceptionBlock(exh: ExceptionHandler) = {
-        if (settings.debug.value)
-          log("new exc block with " + exh + " to " + this)
-        val e = new ExceptionBlock(this, exh)
-        blocks = e :: blocks
-        e
-      }
-      def addBasicBlock(bb: BasicBlock) = {
-        if (settings.debug.value)
-          log("adding bb " + bb + " to " + this)
-        var cb: CodeBlock = if (!blocks.isEmpty) {
-          blocks.head match {
-            case blk: CodeBlock => blk
-            case _ => null
-          }
-        } else null
-        if (cb == null) {
-          cb = new CodeBlock(this)
-          blocks = cb :: blocks
-        }
-        cb.basicBlocks = bb :: cb.basicBlocks
-      }
-      override def close() {
-        blocks.foreach(_.close)
-        blocks = blocks.reverse
-        closed = true
-      }
-      override def toString() = {
-        var res = ""
-        res = res + TopBlock.indent + "BlockList0:\n"
-        TopBlock.indent = TopBlock.indent + "  "
-        for (b <- blocks)
-          res = res + b + "\n"
-        TopBlock.indent = TopBlock.indent.substring(0,TopBlock.indent.length-2)
-        res
-      }
-    }
-    case class BlockList(parent: Block) extends BlockList0 {
-      override def parentBlockList: Option[BlockList0] = {
-        if (parent == TopBlock)
-          Some(TopBlock)
-        else parent match {
-          case bl: BlockList => Some(bl)
-          case cb: CatchBlock => Some(cb)
-          case _ => parent.parentBlockList
-        }
-      }
-      override def toString() = {
-        var res = ""
-        res = res + TopBlock.indent + "BlockList:\n"
-        res = res + super.toString()
-        res
-      }
-    }
-    case class ExceptionBlock(parent: Block, handler: ExceptionHandler) extends Block {
-      var tryBlock: BlockList = new BlockList(this)
-      var catchBlocks: List[CatchBlock] = Nil
-      var finallyBlock: BlockList = new BlockList(this)
-      override def firstBasicBlock = {
-        tryBlock.firstBasicBlock
-      }
-      override def lastBasicBlock = {
-        if (!finallyBlock.blocks.isEmpty)
-          finallyBlock.lastBasicBlock
-        else if(!catchBlocks.isEmpty) {
-          if (closed) catchBlocks.last.lastBasicBlock
-          else catchBlocks.head.lastBasicBlock
-        } else {
-          tryBlock.lastBasicBlock
-        }
-      }
-      override def parentBlockList: Option[BlockList0] = {
-        if (parent == TopBlock)
-          Some(TopBlock)
-        else parent match {
-          case bl: BlockList => Some(bl)
-          case cb: CatchBlock => Some(cb)
-          case _ => parent.parentBlockList
-        }
-      }
-/*      override def getExceptionBlock(exh: ExceptionHandler): Option[ExceptionBlock] = {
-        if (exh == handler) Some(this)
-        else {
-          val t = if (tryBlock == null) Nil else List(tryBlock)
-          val f = if (finallyBlock == null) Nil else List(finallyBlock)
-          findExceptionBlock(t ::: catchBlocks ::: f, exh)
-        }
-      }
-*/
-      def addCatchBlock(exSym: Symbol): CatchBlock = {
-        if (settings.debug.value)
-          log("new catch block with " + exSym + " to " + this)
-        val c = new CatchBlock(this, exSym)
-        catchBlocks = c :: catchBlocks
-        c
-      }
-      override def close() {
-        tryBlock.close
-        catchBlocks.foreach(_.close)
-        catchBlocks = catchBlocks.reverse
-        finallyBlock.close
-        closed = true
-      }
-      override def toString() = {
-        var res = ""
-        res = res + TopBlock.indent + "ExceptionBlock, handler: " + handler + "\n"
-        res = res + TopBlock.indent + "  " + "try:\n"
-        TopBlock.indent = TopBlock.indent + "    "
-        res = res + tryBlock + "\n"
-        TopBlock.indent = TopBlock.indent.substring(0,TopBlock.indent.length-4)
-        res = res + TopBlock.indent + "  " + "catch:\n"
-        TopBlock.indent = TopBlock.indent + "    "
-        for (b <- catchBlocks)
-          res = res + b + "\n"
-        TopBlock.indent = TopBlock.indent.substring(0,TopBlock.indent.length-4)
-        res = res + TopBlock.indent + "  " + "finally:\n"
-        TopBlock.indent = TopBlock.indent + "    "
-        res = res + finallyBlock + "\n"
-        TopBlock.indent = TopBlock.indent.substring(0,TopBlock.indent.length-4)
-        res
-      }
-    }
-    case class CatchBlock(parent: ExceptionBlock, exSym: Symbol) extends BlockList0 {
-      override def parentBlockList: Option[BlockList0] = {
-        parent.parentBlockList
-      }
-      override def toString() = {
-        var res = ""
-        res = res + TopBlock.indent + "CatchBlock:\n"
-        res = res + super.toString()
-        res
-      }
-    }
-    case object TopBlock extends BlockList0 {
-      var indent = ""
-      override def parentBlockList = None
-      override def toString() = {
-        var res = ""
-        res = res + TopBlock.indent + "TopBlock:\n"
-        res = res + super.toString()
-        res
+    def genBlocks(blocks: List[BasicBlock], previous: BasicBlock = null) {
+      blocks match {
+        case Nil => ()
+        case x :: Nil => genBlock(x, prev = previous, next = null)
+        case x :: y :: ys => genBlock(x, prev = previous, next = y); genBlocks(y :: ys, previous = x)
       }
     }
 
-    // for every basic block, a list of ExHInstructions to be executed:
-    //   - Begin_ are executed before the block
-    //   - EndExceptionBlock is executed after the block
-    val bb2exHInstructions: HashMap[BasicBlock, List[ExHInstruction]] = new HashMap()
-    // at the end of a try, catch or finally block, the jumps must not be emitted,
-    // the automatically generated leave (or endfinally) will do the job.
+    // the try blocks starting at a certain BasicBlock
+    val beginExBlock = new HashMap[BasicBlock, List[ExceptionHandler]]()
+
+    // the catch blocks starting / endling at a certain BasicBlock
+    val beginCatchBlock = new HashMap[BasicBlock, ExceptionHandler]()
+    val endExBlock = new HashMap[BasicBlock, List[ExceptionHandler]]()
+
+    // at the end of a try or catch block, the jumps must not be emitted.
+    // the automatically generated leave will do the job.
     val omitJumpBlocks: HashSet[BasicBlock] = new HashSet()
 
-    // suposes that finalizers are the same for different handlers
-    // covering the same blocks
-    def orderBlocksForExh(blocks: List[BasicBlock], exH: List[ExceptionHandler]): List[BasicBlock] = {
+    /** Computes which blocks are the beginning / end of a try or catch block */
+    private def computeExceptionMaps(blocks: List[BasicBlock], m: IMethod): List[BasicBlock] = {
+      val visitedBlocks = new HashSet[BasicBlock]()
 
-      var blocksToPut: List[BasicBlock] = blocks
-      var nextBlock: BasicBlock = null
-      var untreatedHandlers: List[ExceptionHandler] = exH
-      TopBlock.blocks = Nil
-      var currentBlock: BlockList0 = TopBlock
-      def addBlocks(b: List[BasicBlock]):Unit = b match {
-        case Nil => if (settings.debug.value) log("adding " + b)
+      // handlers which have not been intruduced so far
+      var openHandlers = m.exh
 
-        case x :: xs =>
-          if (settings.debug.value) log("adding " + b)
-          // problem: block may already be added, and and needs to be moved.
-          // if nextblock NOT in b: check if nextblock in blocksToPut, if NOT, check if movable, else don't put
-          if (nextBlock != null && b.contains(nextBlock)) {
-            val blocksToAdd = nextBlock :: (b - nextBlock)
-            nextBlock = null
-            addBlocks(blocksToAdd)
-          }
-          else if (untreatedHandlers.forall(h => !(h.covers(x)))) {
 
-            if (settings.debug.value) log(" no new handler for " + x)
-            if (untreatedHandlers.forall(h => !(h.blocks.contains(x) ||
-                                                (h.finalizer != null &&
-                                                 h.finalizer.covers(x)))))
-              {
-                // the block is not part of some catch or finally code
-                currentBlock.addBasicBlock(x)
-                blocksToPut = blocksToPut - x
-                if (settings.debug.value) log(" -> addBlocks(" + xs + ")")
-                addBlocks(xs)
+      /** Example
+       *   try {
+       *     try {
+       *         // *1*
+       *     } catch {
+       *       case h1 =>
+       *     }
+       *   } catch {
+       *     case h2 =>
+       *     case h3 =>
+       *       try {
+       *
+       *       } catch {
+       *         case h4 =>  // *2*
+       *         case h5 =>
+       *       }
+       *   }
+       */
+
+      // Stack of nested try blocks. Each bloc has a List of ExceptionHandler (multiple
+      // catch statements). Example *1*: Stack(List(h2, h3), List(h1))
+      val currentTryHandlers = new Stack[List[ExceptionHandler]]()
+
+      // Stack of nested catch blocks. The head of the list is the current catch block. The
+      // tail is all following catch blocks. Example *2*: Stack(List(h3), List(h4, h5))
+      val currentCatchHandlers = new Stack[List[ExceptionHandler]]()
+
+      var prev: BasicBlock = null
+
+      for (b <- blocks) {
+
+        // are we past the current catch blocks?
+        def endHandlers(): List[ExceptionHandler] = {
+          var res: List[ExceptionHandler] = Nil
+          if (!currentCatchHandlers.isEmpty) {
+            val handler = currentCatchHandlers.top.head
+            if (!handler.blocks.contains(b)) {
+              // all blocks of the handler are either visited, or not part of the linearization (i.e. dead)
+              assert(handler.blocks.forall(b => visitedBlocks.contains(b) || !blocks.contains(b)),
+                     "Bad linearization of basic blocks inside catch. Found block not part of the handler\n"+
+                     b.fullString +"\nwhile in catch-part of\n"+ handler)
+
+              omitJumpBlocks += prev
+
+              val rest = currentCatchHandlers.pop.tail
+              if (rest.isEmpty) {
+                res = handler :: endHandlers()
               } else {
-                if (settings.debug.value) log("x is part of catch or finally block")
-
-                // check if the covered code of the handler x belongs to is empty
-                // this check is not needed for finalizers: empty try with finalizer
-                // is optimized by compiler (no try left)
-                if(untreatedHandlers.forall(h =>
-                  (!h.blocks.contains(x) || h.covered.isEmpty))) {
-                    blocksToPut = blocksToPut - x
-                    addBlocks(xs)
-                  } else
-                    addBlocks(xs ::: List(x))
-              }
-          } else { // there are new handlers for this block
-
-            var firstBlockAfter: HashMap[ExceptionHandler,BasicBlock] = new HashMap()
-            val savedCurrentBlock = currentBlock
-            /**
-             * the output blocks of this method are changed so that:
-             *  - only one block has a successor outside the set of blocks
-             *  - this block is the last of the reusulting list
-             *
-             * side-effect: it stores the successor in the hashMap
-             *  firstBlockAfter, which has to be emitted first after try/catch/finally,
-             *  because the target of the Leave-instruction will always be the first
-             *  instruction after EndExceptionBlock
-             *
-             * returns: the output blocks plus an Option containing the possibly created
-             * new block
-             **/
-            def adaptBlocks(blocks: List[BasicBlock], exh: ExceptionHandler): (List[BasicBlock], Option[BasicBlock]) = {
-              def outsideTargets(block: BasicBlock, blocks: List[BasicBlock]) = {
-                /* The catch block of the ExceptionHandler is always a successor of any block inside the try
-                 * (see successors method in BasicBlocks.scala)
-                 * Thus, this successor does not correspond to a jump outside the exception handler
-                 * and has to be ignored when computing the list of blocks leaving the exception handler.  */
-                val res = block.successors.filter(scc => !blocks.contains(scc) && scc != exh.startBlock)
-                if (settings.debug.value) log("outside of " + block + " = " + res + " succ " + block.successors)
-                res
-              }
-              // get leaving blocks and their outside targets
-              def leavingBlocks(blocks: List[BasicBlock]): List[(BasicBlock, List[BasicBlock])] = {
-                for {b <- blocks
-                     val t = outsideTargets(b, blocks)
-                     if t.length != 0 } yield (b, t)
-              }
-
-              def replaceOutJumps(blocks: List[BasicBlock], leaving: List[(BasicBlock, List[BasicBlock])], exh: ExceptionHandler): (List[BasicBlock], Option[BasicBlock]) = {
-                def replaceJump(block: BasicBlock, from: BasicBlock, to: BasicBlock) = block.lastInstruction match {
-                  case JUMP(whereto) =>
-                    //assert(from == whereto)
-                    block.replaceInstruction(block.lastInstruction, JUMP(to))
-                  case CJUMP(success, failure, cond, kind) =>
-                    if (from == success)
-                      block.replaceInstruction(block.lastInstruction, CJUMP(to, failure, cond, kind))
-                    else
-                      //assert(from == failure)
-                    if (from == failure)
-                      block.replaceInstruction(block.lastInstruction, CJUMP(success, to, cond, kind))
-                  case CZJUMP(success, failure, cond, kind) =>
-                    if (from == success)
-                      block.replaceInstruction(block.lastInstruction, CZJUMP(to, failure, cond, kind))
-                    else
-                      //assert(from == failure)
-                    if (from == failure)
-                      block.replaceInstruction(block.lastInstruction, CZJUMP(success, to, cond, kind))
-                  case SWITCH(tags, labels) => // labels: List[BasicBlock]
-                    val newLabels = labels.map(b => if (b == from) to else b)
-                    assert(newLabels.contains(to))
-                    block.replaceInstruction(block.lastInstruction, SWITCH(tags, newLabels))
-                  /*
-                  case RETURN(kind) =>
-                    if (kind != UNIT) {
-                        returnVal
-                    }
-                    block.replaceInstruction(block.lastInstructionm JUMP(to))
-                  */
-                  case _ => () //abort("expected branch at the end of block " + block)
-                }
-
-                val jumpOutBlock = blocks.last.code.newBlock
-                jumpOutBlock.emit(JUMP(firstBlockAfter(exh)))
-                jumpOutBlock.close
-                leaving.foreach(p => {
-                  val lBlock = p._1
-                  val target = p._2(0) // the elemets of p._2 are all the same, checked before
-                  replaceJump(lBlock, target, jumpOutBlock)
-                  if (settings.debug.value) log("replacing " + lBlock + " target " + target + " jump out " + jumpOutBlock)
-                })
-                (blocks ::: List(jumpOutBlock), Some(jumpOutBlock))
-              }
-
-              val leaving = leavingBlocks(blocks)
-              if (settings.debug.value) log("leaving " + leaving)
-              if (leaving.length == 0)
-                (blocks, None)
-              else if (leaving.length == 1) {
-                val outside = leaving(0)._2
-                //assert(outside.forall(b => b == outside(0)), "exception-block leaving to multiple targets")
-                if (!firstBlockAfter.isDefinedAt(exh))
-                  firstBlockAfter(exh) = outside(0)
-                //else ()
-                  //assert(firstBlockAfter(exh) == outside(0), "try/catch leaving to multiple targets: " + firstBlockAfter(exh) + ", new: " + outside(0))
-                val last = leaving(0)._1
-                ((blocks - last) ::: List(last), None)
-              } else {
-                val outside = leaving.flatMap(p => p._2)
-                //assert(outside.forall(b => b == outside(0)), "exception-block leaving to multiple targets")
-                if (!firstBlockAfter.isDefinedAt(exh))
-                  firstBlockAfter(exh) = outside(0)
-                //else
-                  //assert(firstBlockAfter(exh) == outside(0), "try/catch leaving to multiple targets")
-                replaceOutJumps(blocks, leaving, exh)
+                currentCatchHandlers.push(rest)
+                beginCatchBlock(b) = rest.head
               }
             }
-
-            var affectedHandlers: List[ExceptionHandler] = Nil
-            untreatedHandlers.foreach( (h) => {
-              if (h.covers(x)){
-                affectedHandlers = h :: affectedHandlers
-              }
-            })
-
-            // shorter try-catch-finally last (the ones contained in another)
-            affectedHandlers = affectedHandlers.sort({(h1, h2) => h1.covered.size > h2.covered.size})
-            affectedHandlers = affectedHandlers.filter(h => {h.covered.size == affectedHandlers(0).covered.size})
-            untreatedHandlers = untreatedHandlers -- affectedHandlers
-
-            // more than one catch produces more than one exh, but we only need one
-            var singleAffectedHandler: ExceptionHandler = affectedHandlers(0) // List[ExceptionHandler] = Nil
-            var exceptionBlock: Option[ExceptionBlock] = None
-            if (settings.debug.value) log("affected handlers " + affectedHandlers)
-            affectedHandlers.foreach(h1 => {
-              val (adaptedBlocks, newBlock) = adaptBlocks(blocksToPut.intersect(h1.blocks), singleAffectedHandler)
-              newBlock match {
-                case Some(block) =>
-                  blocksToPut = blocksToPut ::: List(block)
-                  h1.addBlock(block)
-                case None => ()
-              }
-              val orderedCatchBlocks = h1.startBlock :: (adaptedBlocks - h1.startBlock)
-
-              exceptionBlock match {
-                case Some(excBlock) =>
-                  val catchBlock = excBlock.addCatchBlock(h1.cls)
-                  currentBlock = catchBlock
-                  addBlocks(orderedCatchBlocks)
-                case None =>
-                  val excBlock = currentBlock.addExceptionBlock(singleAffectedHandler)
-                  exceptionBlock = Some(excBlock)
-
-                  val (tryBlocks, newBlock) = adaptBlocks(blocksToPut.intersect(singleAffectedHandler.covered.toList), singleAffectedHandler)
-
-                  newBlock match {
-                    case Some(block) =>
-                      blocksToPut = blocksToPut ::: List(block)
-                      singleAffectedHandler.addCoveredBlock(block)
-                    case None => ()
-                  }
-                  currentBlock = excBlock.tryBlock
-                  if (settings.debug.value) log("adding try blocks " + tryBlocks)
-                  addBlocks(tryBlocks)
-
-                  if (singleAffectedHandler.finalizer != null && singleAffectedHandler.finalizer != NoFinalizer) {
-                    val (blocks0, newBlock) = adaptBlocks(blocksToPut.intersect(singleAffectedHandler.finalizer.blocks), singleAffectedHandler)
-                    newBlock match {
-                      case Some(block) =>
-                        blocksToPut = blocksToPut ::: List(block)
-                        singleAffectedHandler.finalizer.addBlock(block)
-                      case None => ()
-                    }
-                    val blocks = singleAffectedHandler.finalizer.startBlock :: (blocks0 - singleAffectedHandler.finalizer.startBlock)
-                    currentBlock = excBlock.finallyBlock
-                    addBlocks(blocks)
-                  }
-
-                  val catchBlock = excBlock.addCatchBlock(singleAffectedHandler.cls)
-                  currentBlock = catchBlock
-                  addBlocks(orderedCatchBlocks)
-              }
-              if (firstBlockAfter.isDefinedAt(singleAffectedHandler))
-                nextBlock = firstBlockAfter(singleAffectedHandler)
-              else
-                nextBlock = null
-            })
-
-            currentBlock = savedCurrentBlock
-
-            if (settings.debug.value)
-              log(" -> addBlocks(" + xs.intersect(blocksToPut) + ")")
-            addBlocks(xs.intersect(blocksToPut))
           }
-      }
-
-      // begin method orderBlocksForExh
-
-      if (settings.debug.value)
-        log("before: " + blocks)
-      // some blocks may have been removed by linearization
-      untreatedHandlers.foreach(h => {
-        h.blocks = h.blocks.intersect(blocksToPut)
-        h.covered = h.covered.intersect(collection.immutable.HashSet.empty ++ blocksToPut)
-        if (h.finalizer != null && h.finalizer != NoFinalizer)
-          h.finalizer.blocks = h.finalizer.blocks.intersect(blocksToPut)
-      })
-      addBlocks(blocks)
-
-      TopBlock.close()
-
-      if (settings.debug.value) log("TopBlock tree is: ")
-      if (settings.debug.value) log(TopBlock)
-
-      bb2exHInstructions.clear
-      def addExHInstruction(b: BasicBlock, ehi: ExHInstruction) = {
-        if (settings.debug.value)
-          log("adding exhinstr: " + b + " -> " + ehi)
-
-        if (bb2exHInstructions.contains(b)){
-          bb2exHInstructions(b) = ehi :: bb2exHInstructions(b)
-        } else {
-          bb2exHInstructions(b) = List(ehi)
+          res
         }
-      }
-      omitJumpBlocks.clear
-      def omitJump(blk: BasicBlock) = {
-        omitJumpBlocks += blk
-      }
-      var orderedBlocks: List[BasicBlock] = Nil
-      def flatten(block: Block) {
-        if (block == TopBlock) {
-          for (b <- TopBlock.blocks) flatten(b)
-        } else block match {
-          case cb: CodeBlock =>
-            orderedBlocks = orderedBlocks ::: cb.basicBlocks
-          case bl: BlockList =>
-            for (b <- bl.blocks) flatten(b)
-          case cb: CatchBlock =>
-            for (b <- cb.blocks) flatten(b)
-          case eb: ExceptionBlock =>
-            val handler = eb.handler
-            if (settings.debug.value) {
-              log("new exception block " + eb)
-              log("try: " + eb.tryBlock)
-            }
-            addExHInstruction(eb.tryBlock.firstBasicBlock, new BeginExceptionBlock(handler))
-            omitJump(eb.tryBlock.lastBasicBlock)
-            flatten(eb.tryBlock)
-            for (c <- eb.catchBlocks) {
-              val t: MsilType = (if (c.exSym == NoSymbol) EXCEPTION
-                                 else getType(c.exSym))
-              addExHInstruction(c.firstBasicBlock, new BeginCatchBlock(handler, t))
-              omitJump(c.lastBasicBlock)
-              flatten(c)
-            }
-            if (handler.finalizer != null && handler.finalizer != NoFinalizer) {
-              addExHInstruction(eb.finallyBlock.firstBasicBlock, new BeginFinallyBlock(handler))
-              flatten(eb.finallyBlock)
-              addExHInstruction(eb.finallyBlock.lastBasicBlock, new EndExceptionBlock(handler))
-              omitJump(eb.finallyBlock.lastBasicBlock)
-            } else {
-              addExHInstruction(eb.catchBlocks.last.lastBasicBlock, new EndExceptionBlock(handler))
-            }
+        val end = endHandlers()
+        if (!end.isEmpty) endExBlock(b) = end
+
+        // are we past the current try block?
+        if (!currentTryHandlers.isEmpty) {
+          val handler = currentTryHandlers.top.head
+          if (!handler.covers(b)) {
+            // all of the covered blocks are visited, or not part of the linearization
+            assert(handler.covered.forall(b => visitedBlocks.contains(b) || !blocks.contains(b)),
+                   "Bad linearization of basic blocks inside try. Found non-covered block\n"+
+                   b.fullString +"\nwhile in try-part of\n"+ handler)
+
+            assert(handler.startBlock == b,
+                   "Bad linearization of basic blocks. The entry block of a catch does not directly follow the try\n"+
+                   b.fullString +"\n"+ handler)
+
+            val handlers = currentTryHandlers.pop
+            currentCatchHandlers.push(handlers)
+            beginCatchBlock(b) = handler
+            omitJumpBlocks += prev
+          }
         }
+
+        // are there try blocks starting at b?
+        val (newHandlers, stillOpen) = openHandlers.partition(_.covers(b))
+        openHandlers = stillOpen
+
+        val newHandlersBySize = newHandlers.groupBy(_.covered.size)
+        // big handlers first, smaller ones are nested inside the try of the big one
+        // (checked by the assertions below)
+        val sizes = newHandlersBySize.keysIterator.toList.sortWith(_ > _)
+
+        val beginHandlers = new ListBuffer[ExceptionHandler]
+        for (s <- sizes) {
+          val sHandlers = newHandlersBySize(s)
+          for (h <- sHandlers) {
+            assert(h.covered == sHandlers.head.covered,
+                   "bad nesting of exception handlers. same size, but not covering same blocks\n"+
+                   h +"\n"+ sHandlers.head)
+            assert(h.resultKind == sHandlers.head.resultKind,
+                   "bad nesting of exception handlers. same size, but the same resultKind\n"+
+                   h +"\n"+ sHandlers.head)
+          }
+          for (bigger <- beginHandlers; h <- sHandlers) {
+            assert(h.covered.subsetOf(bigger.covered),
+                   "bad nesting of exception handlers. try blocks of smaller handler are not nested in bigger one.\n"+
+                   h +"\n"+ bigger)
+            assert(h.blocks.toSet.subsetOf(bigger.covered),
+                   "bad nesting of exception handlers. catch blocks of smaller handler are not nested in bigger one.\n"+
+                   h +"\n"+ bigger)
+          }
+          beginHandlers += sHandlers.head
+          currentTryHandlers.push(sHandlers)
+        }
+        beginExBlock(b) = beginHandlers.toList
+        visitedBlocks += b
+        prev = b
       }
 
-      flatten(TopBlock)
-
-      assert(untreatedHandlers.forall((h) => h.covered.isEmpty),
-             "untreated exception handlers left: " + untreatedHandlers)
-      // remove catch blocks from empty handlers (finally-blocks remain)
-      untreatedHandlers.foreach((h) => {
-        orderedBlocks = orderedBlocks -- h.blocks
-      })
-
-      // take care of order in which exHInstructions are executed (BeginExceptionBlock as last)
-      bb2exHInstructions.keysIterator.foreach((b) => {
-        bb2exHInstructions(b).sort((i1, i2) => (!i1.isInstanceOf[BeginExceptionBlock]))
-      })
-
-
-      if (settings.debug.value){
-        log("after: " + orderedBlocks)
-        log(" exhInstr: " + bb2exHInstructions)
+      // if there handlers left (i.e. handlers covering nothing, or a
+      // non-existent (dead) block), remove their catch-blocks.
+      val liveBlocks = if (openHandlers.isEmpty) blocks else {
+        blocks.filter(b => openHandlers.forall(h => !h.blocks.contains(b)))
       }
 
-      orderedBlocks
-    }
+      /** There might be open handlers, but no more blocks. happens when try/catch end
+       *  with `throw` or `return`
+       *     def foo { try { .. throw } catch { _ => .. throw } }
+       *
+       *  In this case we need some code after the catch block for the auto-generated
+       *  `leave` instruction. So we're adding a (dead) `throw new Exception`.
+       */
+      val rest = currentCatchHandlers.map(handlers => {
+        assert(handlers.length == 1, handlers)
+        handlers.head
+      }).toList
 
-    var currentBlock: BasicBlock = _
-    var lastBlock: BasicBlock = _
-    var nextBlock: BasicBlock = _
-
-    def genBlocks(l: List[BasicBlock]) {
-      l match {
-        case Nil => ()
-        case x :: Nil => currentBlock = x; nextBlock = null; genBlock(x)
-        case x :: y :: ys => currentBlock = x; nextBlock = y; genBlock(x); genBlocks(y :: ys)
+      if (rest.isEmpty) {
+        liveBlocks
+      } else {
+        omitJumpBlocks += prev
+        val b = m.code.newBlock
+        b.emit(Seq(
+          NEW(REFERENCE(definitions.ThrowableClass)),
+          DUP(REFERENCE(definitions.ObjectClass)),
+          CALL_METHOD(definitions.ThrowableClass.primaryConstructor, Static(true)),
+          THROW()
+        ))
+        b.close
+        endExBlock(b) = rest
+        liveBlocks ::: List(b)
       }
     }
 
-    var ignoreNextDup: Boolean = false
-    val excResultLocals: Stack[LocalBuilder] = new Stack()
-
-    def genBlock(b: BasicBlock) {
-      // at begin of the first block, there's nothing to save =>
-      //  lastBlock != null is secure
-      def saveResult(resType: MsilType) = if (resType != MVOID && lastBlock != null) {
-        lastBlock.lastInstruction match {
-          case THROW() => ()
-          case _ =>
-            val lb: LocalBuilder = excResultLocals.top
-            mcode.Emit(OpCodes.Stloc, lb)
-        }
-      }
-
-      if (bb2exHInstructions.contains(b)){
-        bb2exHInstructions(b).foreach((i) => i match {
-          case BeginExceptionBlock(handler) =>
-            if (settings.debug.value) log("begin ex blk: " + handler)
-            mcode.BeginExceptionBlock()
-            val resType = msilType(handler.resultKind)
-            if (resType != MVOID) {
-              val l = mcode.DeclareLocal(resType)
-              l.SetLocalSymInfo("$exhResult")
-              excResultLocals.push(l)
-            }
-          case BeginCatchBlock(handler, exType) =>
-            if (settings.debug.value) log("begin catch blk: " + handler + ", tpe: " + exType)
-            saveResult(msilType(handler.resultKind))
-            mcode.BeginCatchBlock(exType)
-          case BeginFinallyBlock(handler) =>
-            saveResult(msilType(handler.resultKind))
-            mcode.BeginFinallyBlock()
-          case EndExceptionBlock(handler) => ()
-          case _ => abort("unknown case: " + i)
-        })
-      }
-
-      mcode.MarkLabel(labels(b))
-      if (settings.debug.value)
-        log("Generating code for block: " + b)
+    /**
+     *  @param block the BasicBlock to emit code for
+     *  @param next  the following BasicBlock, `null` if `block` is the last one
+     */
+    def genBlock(block: BasicBlock, prev: BasicBlock, next: BasicBlock) {
+      /** Creating objects works differently on .NET. On the JVM
+       *  - NEW(type) => reference on Stack
+       *  - DUP, load arguments, CALL_METHOD(constructor)
+       *
+       * On .NET, the NEW and DUP are ignored, but we emit a special method call
+       *  - load arguments
+       *  - NewObj(constructor) => reference on stack
+       *
+       * This variable tells wether the previous instruction was a NEW,
+       * we expect a DUP which is not emitted. */
+      var previousWasNEW = false
 
       var lastLineNr: Int = 0
 
-      for (instr <- b) {
+      mcode.MarkLabel(labels(block))
 
-        needAdditionalRet = false
-        
-	val currentLineNr = instr.pos.line
+      if (settings.debug.value)
+        log("Generating code for block: " + block)
+
+      for (handlers <- endExBlock.get(block); exh <- handlers) {
+        mcode.EndExceptionBlock()
+      }
+      for (handler <- beginCatchBlock.get(block)) {
+        if (handler.cls == NoSymbol) {
+          // `finally` blocks are represented the same as `catch`, but with no catch-type
+          mcode.BeginFinallyBlock()
+        } else {
+          val t = getType(handler.cls)
+          mcode.BeginCatchBlock(t)
+        }
+      }
+      for (handlers <- beginExBlock.get(block); exh <- handlers) {
+        mcode.BeginExceptionBlock()
+      }
+
+      for (instr <- block) {
+        val currentLineNr = try {
+          instr.pos.line
+        } catch {
+          case _: UnsupportedOperationException =>
+            log("Warning: wrong position in: " + method)
+            lastLineNr
+        }
 
         if (currentLineNr != lastLineNr) {
           mcode.setPosition(currentLineNr)
           lastLineNr = currentLineNr
         }
+
+        if (previousWasNEW)
+          assert(instr.isInstanceOf[DUP], block)
 
         instr match {
           case THIS(clasz) =>
@@ -1267,29 +886,25 @@ abstract class GenMSIL extends SubComponent {
           case LOAD_LOCAL(local) =>
             if (settings.debug.value)
               log("load_local for " + local)
-            val isArg: Boolean = local.arg
+            val isArg = local.arg
             val i = local.index
-            if (isArg) {
+            if (isArg)
               loadArg(mcode)(i)
-            }
-            else {
+            else
               loadLocal(i, local, mcode)
-            }
 
           case LOAD_FIELD(field, isStatic) =>
             if (settings.debug.value)
               log("LOAD_FIELD with owner: " + field.owner +
                   " flags: " + Flags.flagsToString(field.owner.flags))
-
-            var fieldInfo: FieldInfo = fields.get(field.asInstanceOf[clrTypes.global.Symbol]) match {
+            var fieldInfo = fields.get(field) match {
               case Some(fInfo) => fInfo
               case None =>
                 val fInfo = getType(field.owner).GetField(msilName(field))
-                fields(field.asInstanceOf[clrTypes.global.Symbol]) = fInfo
+                fields(field) = fInfo
                 fInfo
             }
             mcode.Emit(if (isStatic) OpCodes.Ldsfld else OpCodes.Ldfld, fieldInfo)
-
 
           case LOAD_MODULE(module) =>
             if (settings.debug.value)
@@ -1312,7 +927,7 @@ abstract class GenMSIL extends SubComponent {
             }
 
           case STORE_LOCAL(local) =>
-            val isArg: Boolean = local.arg
+            val isArg = local.arg
             val i = local.index
             if (settings.debug.value)
               log("store_local for " + local + ", index " + i)
@@ -1342,21 +957,19 @@ abstract class GenMSIL extends SubComponent {
             // this only works for impl classes because the self parameter comes first
             // in the method signature. If that changes, this code has to be revisited.
             mcode.Emit(OpCodes.Starg_S, 0)
-            
+
           case STORE_FIELD(field, isStatic) =>
-            val fieldInfo: FieldInfo = fields.get(field.asInstanceOf[clrTypes.global.Symbol]) match {
+            val fieldInfo = fields.get(field) match {
               case Some(fInfo) => fInfo
               case None =>
                 val fInfo = getType(field.owner).GetField(msilName(field))
-                fields(field.asInstanceOf[clrTypes.global.Symbol]) = fInfo
+                fields(field) = fInfo
                 fInfo
             }
             mcode.Emit(if (isStatic) OpCodes.Stsfld else OpCodes.Stfld, fieldInfo)
 
-
           case CALL_PRIMITIVE(primitive) =>
             genPrimitive(primitive, instr.pos)
-
 
           case CALL_METHOD(msym, style) =>
             if (msym.isClassConstructor) {
@@ -1365,6 +978,12 @@ abstract class GenMSIL extends SubComponent {
                 // normal constructor calls are Static..
                 case Static(_) =>
                   if (method.symbol.isClassConstructor && method.symbol.owner == msym.owner)
+                    // we're generating a constructor (method: IMethod is a constructor), and we're
+                    // calling another constructor of the same class.
+
+                    // @LUC TODO: this can probably break, namely when having: class A { def this { new A() } }
+                    // instead, we should instruct the CALL_METHOD with additional information, know whether it's
+                    // an instance creation constructor call or not.
                     mcode.Emit(OpCodes.Call, constructorInfo)
                   else
                     mcode.Emit(OpCodes.Newobj, constructorInfo)
@@ -1392,8 +1011,8 @@ abstract class GenMSIL extends SubComponent {
                 mcode.Emit(OpCodes.Add) // compute length (-start + end)
               }
 
-              var doEmit: Boolean = true
-              types.get(msym.owner.asInstanceOf[clrTypes.global.Symbol]) match {
+              var doEmit = true
+              types.get(msym.owner) match {
                 case Some(typ) if (typ.IsEnum) => {
                   def negBool = {
                     mcode.Emit(OpCodes.Ldc_I4_0)
@@ -1417,7 +1036,7 @@ abstract class GenMSIL extends SubComponent {
               }
 
               // method: implicit view(FunctionX[PType0, PType1, ...,PTypeN, ResType]):DelegateType
-              val (isDelegateView, paramType, resType) = atPhase(currentRun.typerPhase){
+              val (isDelegateView, paramType, resType) = atPhase(currentRun.typerPhase) {
                 msym.tpe match {
                   case MethodType(params, resultType)
                   if (params.length == 1 && msym.name == nme.view_) =>
@@ -1475,12 +1094,13 @@ abstract class GenMSIL extends SubComponent {
               }
             }
 
-          case BOX(boxType) => emitBox(mcode, boxType) //mcode.Emit(OpCodes.Box, msilType(boxType))
+          case BOX(boxType) => emitBox(mcode, boxType)
 
           case UNBOX(boxType) => emitUnbox(mcode, boxType)
 
           case NEW(REFERENCE(cls)) =>
-            ignoreNextDup = true
+            // the next instruction must be a DUP, see comment on `var previousWasNEW`
+            previousWasNEW = true
 
           // works also for arrays and reference-types
           case CREATE_ARRAY(elem, dims) =>
@@ -1496,14 +1116,12 @@ abstract class GenMSIL extends SubComponent {
             mcode.Emit(OpCodes.Ldc_I4_0)
             mcode.Emit(OpCodes.Ceq)
 
-
           // works for arrays and reference-types
           // part from the scala reference: "S <: T does not imply
           //  Array[S] <: Array[T] in Scala. However, it is possible
           //  to cast an array of S to an array of T if such a cast
           //  is permitted in the host environment."
           case CHECK_CAST(tpe) => mcode.Emit(OpCodes.Castclass, msilType(tpe))
-
 
           // no SWITCH is generated when there's
           //  - a default case ("case _ => ...") in the matching expr
@@ -1521,7 +1139,7 @@ abstract class GenMSIL extends SubComponent {
             switchLocal.SetLocalSymInfo("$switch_var")
 
             mcode.Emit(OpCodes.Stloc, switchLocal)
-            var i: Int = 0
+            var i = 0
             for (l <- tags) {
               var targetLabel = labels(branches(i))
               for (i <- l) {
@@ -1532,25 +1150,24 @@ abstract class GenMSIL extends SubComponent {
               i += 1
             }
             val defaultTarget = labels(branches(i))
-            if (nextBlock != defaultTarget && !omitJumpBlocks.contains(currentBlock))
+            if (next != defaultTarget && !omitJumpBlocks.contains(block))
               mcode.Emit(OpCodes.Br, defaultTarget)
 
 
           case JUMP(whereto) =>
-            if (nextBlock != whereto && !omitJumpBlocks.contains(currentBlock))
+            if (next != whereto && !omitJumpBlocks.contains(block))
               mcode.Emit(OpCodes.Br, labels(whereto))
-
 
           case CJUMP(success, failure, cond, kind) =>
             // cond is TestOp (see Primitives.scala), and can take
             // values EQ, NE, LT, GE LE, GT
             // kind is TypeKind
             val isFloat = kind == FLOAT || kind == DOUBLE
-            if (nextBlock == success || omitJumpBlocks.contains(currentBlock)) {
+            if (next == success || omitJumpBlocks.contains(block)) {
               emitBr(cond.negate, labels(failure), isFloat)
             } else {
               emitBr(cond, labels(success), isFloat)
-              if (nextBlock != failure && !omitJumpBlocks.contains(currentBlock)) {
+              if (next != failure && !omitJumpBlocks.contains(block)) {
                 mcode.Emit(OpCodes.Br, labels(failure))
               }
             }
@@ -1558,11 +1175,11 @@ abstract class GenMSIL extends SubComponent {
           case CZJUMP(success, failure, cond, kind) =>
             (kind: @unchecked) match {
               case BOOL | REFERENCE(_) =>
-                if (nextBlock == success || omitJumpBlocks.contains(currentBlock)) {
+                if (next == success || omitJumpBlocks.contains(block)) {
                   emitBrBool(cond.negate, labels(failure))
                 } else {
                   emitBrBool(cond, labels(success))
-                  if (nextBlock != failure && !omitJumpBlocks.contains(currentBlock)) {
+                  if (next != failure && !omitJumpBlocks.contains(block)) {
                     mcode.Emit(OpCodes.Br, labels(failure))
                   }
                 }
@@ -1578,12 +1195,11 @@ abstract class GenMSIL extends SubComponent {
             mcode.Emit(OpCodes.Pop)
 
           case DUP(kind) =>
-            // needed to create new instances
-            if (!ignoreNextDup) {
+            // see comment on `var previousWasNEW`
+            if (!previousWasNEW)
               mcode.Emit(OpCodes.Dup)
-            } else {
-              ignoreNextDup = false
-            }
+            else
+              previousWasNEW = false
 
           case MONITOR_ENTER() =>
             mcode.Emit(OpCodes.Call, MMONITOR_ENTER)
@@ -1591,35 +1207,12 @@ abstract class GenMSIL extends SubComponent {
           case MONITOR_EXIT() =>
             mcode.Emit(OpCodes.Call, MMONITOR_EXIT)
 
-          case SCOPE_ENTER(_) | SCOPE_EXIT(_) =>
+          case SCOPE_ENTER(_) | SCOPE_EXIT(_) | LOAD_EXCEPTION() =>
             ()
         }
 
       } // end for (instr <- b) { .. }
-
-      lastBlock = b // this way, saveResult knows lastBlock
-
-      if (bb2exHInstructions.contains(b)){
-        bb2exHInstructions(b).foreach((i) => i match {
-          case BeginExceptionBlock(handler) => ()
-          case BeginCatchBlock(handler, exType) => ()
-          case BeginFinallyBlock(handler) => ()
-          case EndExceptionBlock(handler) =>
-            if (settings.debug.value) log("end ex blk: " + handler)
-            val resType = msilType(handler.resultKind)
-            if (handler.finalizer == null || handler.finalizer == NoFinalizer)
-              saveResult(resType)
-            mcode.EndExceptionBlock()
-            if (resType != MVOID) {
-              val lb: LocalBuilder = excResultLocals.pop
-              mcode.Emit(OpCodes.Ldloc, lb)
-            } else
-              needAdditionalRet = true
-          case _ => abort("unknown case: " + i)
-        })
-      }
-
-    } // end genBlock
+    }
 
     def genPrimitive(primitive: Primitive, pos: Position) {
       primitive match {
@@ -1745,8 +1338,6 @@ abstract class GenMSIL extends SubComponent {
     ////////////////////// labels ///////////////////////
 
 
-    val labels: HashMap[BasicBlock, Label] = new HashMap() // labels for branches
-
     def emitBr(condition: TestOp, dest: Label, isFloat: Boolean) {
       condition match {
         case EQ => mcode.Emit(OpCodes.Beq, dest)
@@ -1769,12 +1360,6 @@ abstract class GenMSIL extends SubComponent {
       }
     }
 
-    def makeLabels(bs: List[BasicBlock]) {
-      if (settings.debug.value)
-        log("Making labels for: " + method)
-      for (bb <- bs) labels(bb) = mcode.DefineLabel()
-    }
-
     ////////////////////// local vars ///////////////////////
 
     /**
@@ -1794,7 +1379,7 @@ abstract class GenMSIL extends SubComponent {
         idx += 1 // sizeOf(l.kind)
       }
 
-      val locvars = m.locals -- params
+      val locvars = m.locals filterNot (params contains)
       idx = 0
 
       for (l <- locvars) {
@@ -1876,9 +1461,9 @@ abstract class GenMSIL extends SubComponent {
           mf = mf | FieldAttributes.Static
         else {
           mf = mf | MethodAttributes.Virtual
-          if (sym.isFinal && !types(sym.owner.asInstanceOf[clrTypes.global.Symbol]).IsInterface)
+          if (sym.isFinal && !types(sym.owner).IsInterface)
             mf = mf | MethodAttributes.Final
-          if (sym.hasFlag(Flags.DEFERRED) || types(sym.owner.asInstanceOf[clrTypes.global.Symbol]).IsInterface)
+          if (sym.hasFlag(Flags.DEFERRED) || types(sym.owner).IsInterface)
             mf = mf | MethodAttributes.Abstract
         }
       }
@@ -1928,7 +1513,7 @@ abstract class GenMSIL extends SubComponent {
           if (sym.tpe.paramTypes.length == 1) {
             toTypeKind(sym.tpe.paramTypes(0)) match {
               case ARRAY(elem) =>
-                if (elem.toType.typeSymbol == definitions.StringClass){
+                if (elem.toType.typeSymbol == definitions.StringClass) {
                   return true
                 }
               case _ => ()
@@ -1971,35 +1556,39 @@ abstract class GenMSIL extends SubComponent {
       sym.tpe.paramTypes.map(msilType).toArray
     }
 
-    def getType(sym: Symbol): MsilType = types.get(sym.asInstanceOf[clrTypes.global.Symbol]) match {
+    def getType(sym: Symbol): MsilType = types.get(sym) match {
       case Some(typ) => typ
       case None =>
-        val name = if (sym.isModuleClass && !sym.isTrait) sym.fullNameString + "$"
-                   else sym.fullNameString
+        def typeString(sym: Symbol): String = {
+          val s = if (sym.isNestedClass) typeString(sym.owner) +"+"+ sym.simpleName
+                  else sym.fullNameString
+          if (sym.isModuleClass && !sym.isTrait) s + "$" else s
+        }
+        val name = typeString(sym)
         val typ = clrTypes.getType(name)
         if (typ == null)
           throw new Error(showsym(sym) + " with name " + name)
         else {
-          clrTypes.types(sym.asInstanceOf[clrTypes.global.Symbol]) = typ
+          clrTypes.types(sym) = typ
           typ
         }
     }
 
     def mapType(sym: Symbol, mType: MsilType) {
       assert(mType != null, showsym(sym))
-      types(sym.asInstanceOf[clrTypes.global.Symbol]) = mType
+      types(sym) = mType
     }
 
     def createTypeBuilder(iclass: IClass) {
       def msilTypeFromSym(sym: Symbol): MsilType = {
-	types.get(sym.asInstanceOf[clrTypes.global.Symbol]) match {
+	types.get(sym) match {
           case Some(mtype) => mtype
-          case None => createTypeBuilder(classes(sym)); types(sym.asInstanceOf[clrTypes.global.Symbol])
+          case None => createTypeBuilder(classes(sym)); types(sym)
         }
       }
 
       val sym = iclass.symbol
-      if (types contains sym.asInstanceOf[clrTypes.global.Symbol]) return
+      if (types contains sym) return
 
       def isInterface(s: Symbol) = s.isTrait && !s.isImplClass
       val parents: List[Type] =
@@ -2013,9 +1602,9 @@ abstract class GenMSIL extends SubComponent {
       val interfaces: Array[MsilType] =
 	parents.tail.map(p => msilTypeFromSym(p.typeSymbol)).toArray
       if (parents.length > 1) {
-        if (settings.debug.value){
+        if (settings.debug.value) {
           log("interfaces:")
-          for (i <- 0.until(interfaces.length)){
+          for (i <- 0.until(interfaces.length)) {
             log("  type: " + parents(i + 1).typeSymbol + ", msil type: " + interfaces(i))
           }
         }
@@ -2054,7 +1643,7 @@ abstract class GenMSIL extends SubComponent {
 
         var attributes = msilFieldFlags(sym)
         val fBuilder = mtype.DefineField(msilName(sym), msilType(sym.tpe), attributes)
-        fields(sym.asInstanceOf[clrTypes.global.Symbol]) = fBuilder
+        fields(sym) = fBuilder
         addAttributes(fBuilder, sym.annotations)
       }
 
@@ -2082,10 +1671,10 @@ abstract class GenMSIL extends SubComponent {
           var resType = msilType(m.returnType)
           val method =
             ownerType.DefineMethod(getMethodName(sym), attr, resType, paramTypes)
-          for (i <- 0.until(paramTypes.length)){
+          for (i <- 0.until(paramTypes.length)) {
             method.DefineParameter(i, ParameterAttributes.None, msilName(m.params(i).sym))
           }
-          if (!methods.contains(sym.asInstanceOf[clrTypes.global.Symbol]))
+          if (!methods.contains(sym))
             mapMethod(sym, method)
           addAttributes(method, sym.annotations)
           if (settings.debug.value)
@@ -2131,7 +1720,7 @@ abstract class GenMSIL extends SubComponent {
                            (FieldAttributes.Public |
                             //FieldAttributes.InitOnly |
                             FieldAttributes.Static).toShort)
-      fields(sym.asInstanceOf[clrTypes.global.Symbol]) = fb
+      fields(sym) = fb
     }
 
 
@@ -2146,20 +1735,25 @@ abstract class GenMSIL extends SubComponent {
       // TODO: get module field for modules not defined in the
       // source currently compiling (e.g. Console)
 
-      fields get moduleClassSym.asInstanceOf[clrTypes.global.Symbol] match {
+      fields get moduleClassSym match {
         case Some(sym) => sym
         case None =>
           //val mclass = types(moduleClassSym)
           val mClass = clrTypes.getType(moduleClassSym.fullNameString + "$")
           val mfield = mClass.GetField("MODULE$")
           assert(mfield ne null, "module not found " + showsym(moduleClassSym))
-          fields(moduleClassSym.asInstanceOf[clrTypes.global.Symbol]) = mfield
+          fields(moduleClassSym) = mfield
           mfield
       }
 
       //fields(moduleClassSym)
     }
 
+    /** Adds a static initializer which creates an instance of the module
+     *  class (calls the primary constructor). A special primary constructor
+     *  will be generated (notInitializedModules) which stores the new intance
+     *  in the MODULE$ field right after the super call.
+     */
     private def addStaticInit(sym: Symbol) {
       val tBuilder = getType(sym).asInstanceOf[TypeBuilder]
 
@@ -2170,7 +1764,7 @@ abstract class GenMSIL extends SubComponent {
 
       val sicode = staticInit.GetILGenerator()
 
-      val instanceConstructor = constructors(sym.primaryConstructor.asInstanceOf[clrTypes.global.Symbol])
+      val instanceConstructor = constructors(sym.primaryConstructor)
 
       // there are no constructor parameters. assuming the constructor takes no parameter
       // is fine: we call (in the static constructor) the constructor of the module class,
@@ -2193,7 +1787,6 @@ abstract class GenMSIL extends SubComponent {
                                                  TypeAttributes.Class |
                                                  TypeAttributes.Public |
                                                  TypeAttributes.Sealed,
-                //FIXME: an object may have a super-type (a class, not an object) -> not in mirror class?
                                                  MOBJECT,
                                                  MsilType.EmptyTypes)
 
@@ -2322,7 +1915,7 @@ abstract class GenMSIL extends SubComponent {
     // #####################################################################
     // get and create methods / constructors
  
-    def getConstructor(sym: Symbol): ConstructorInfo = constructors.get(sym.asInstanceOf[clrTypes.global.Symbol]) match {
+    def getConstructor(sym: Symbol): ConstructorInfo = constructors.get(sym) match {
       case Some(constr) => constr
       case None =>
         val mClass = getType(sym.owner)
@@ -2339,7 +1932,7 @@ abstract class GenMSIL extends SubComponent {
     }
 
     def mapConstructor(sym: Symbol, cInfo: ConstructorInfo) = {
-      constructors(sym.asInstanceOf[clrTypes.global.Symbol]) = cInfo
+      constructors(sym) = cInfo
     }
 
     private def getMethod(sym: Symbol): MethodInfo = {
@@ -2354,7 +1947,7 @@ abstract class GenMSIL extends SubComponent {
 //       case SRToShort => toShort
 //       case _ =>
 
-        methods.get(sym.asInstanceOf[clrTypes.global.Symbol]) match {
+        methods.get(sym) match {
         case Some(method) => method
         case None =>
           val mClass = getType(sym.owner)
@@ -2385,7 +1978,7 @@ abstract class GenMSIL extends SubComponent {
      */
     private def mapMethod(sym: Symbol, mInfo: MethodInfo) {
       assert (mInfo != null, mInfo)
-      methods(sym.asInstanceOf[clrTypes.global.Symbol]) = mInfo
+      methods(sym) = mInfo
     }
 
     /*
@@ -2457,12 +2050,12 @@ abstract class GenMSIL extends SubComponent {
           alternatives.find(s => {
             var i: Int = 0
             var typesOK: Boolean = true
-            if (paramTypes.length == s.tpe.paramTypes.length){
-              while(i < paramTypes.length){
+            if (paramTypes.length == s.tpe.paramTypes.length) {
+              while(i < paramTypes.length) {
                 if (paramTypes(i) != s.tpe.paramTypes(i))
                   typesOK = false
                 i += 1
-              } 
+              }
             } else {
               typesOK = false
             }

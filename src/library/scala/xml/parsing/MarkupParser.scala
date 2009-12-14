@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -364,7 +364,7 @@ trait MarkupParser extends AnyRef with TokenTests
    *  [40] STag         ::= '&lt;' Name { S Attribute } [S] 
    *  [44] EmptyElemTag ::= '&lt;' Name { S Attribute } [S] 
    */
-  protected def xTag(pscope:NamespaceBinding): Tuple3[String, MetaData, NamespaceBinding] = {
+  protected def xTag(pscope:NamespaceBinding): (String, MetaData, NamespaceBinding) = {
     val qname = xName
 
     xSpaceOpt
@@ -508,8 +508,10 @@ trait MarkupParser extends AnyRef with TokenTests
               val n = xName
               xToken(';')
               
-              if (unescape contains n) ts &+ unescape(n)
-              else push(n)
+              if (unescape contains n) {
+                handle.entityRef(tmppos, n)
+                ts &+ unescape(n)
+              } else push(n)
             }
           case _ => // text content
             appendText(tmppos, ts, xText);

@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2009 LAMP/EPFL
+ * Copyright 2005-2010 LAMP/EPFL
  * @author  Martin Odersky
  */
 // $Id$
@@ -241,6 +241,8 @@ self =>
 
     var assumedClosingParens = collection.mutable.Map(RPAREN -> 0, RBRACKET -> 0, RBRACE -> 0)
 
+    var inFunReturnType = false
+
     protected def skip(targetToken: Int) {
       var nparens = 0
       var nbraces = 0
@@ -273,10 +275,7 @@ self =>
     def incompleteInputError(msg: String): Unit
     def deprecationWarning(offset: Int, msg: String): Unit
     private def syntaxError(pos: Position, msg: String, skipIt: Boolean) {
-      pos.offset match {
-        case None => syntaxError(msg,skipIt)
-        case Some(offset) => syntaxError(offset, msg, skipIt)
-      }
+      syntaxError(pos pointOrElse in.offset, msg, skipIt)
     }
     def syntaxError(offset: Int, msg: String): Unit
     def syntaxError(msg: String, skipIt: Boolean) {
@@ -420,8 +419,17 @@ self =>
     /** Join the comment associated with a definition
     */
     def joinComment(trees: => List[Tree]): List[Tree] = {
-      val buf = in.flushDoc
-      if ((buf ne null) && buf.length > 0) trees map (t => DocDef(buf, t) setPos t.pos) // !!! take true comment position
+      val doc = in.flushDoc
+      if ((doc ne null) && doc.raw.length > 0) {
+        val ts = trees
+        val main = ts.find(_.pos.isOpaqueRange)
+        ts map {
+          t =>
+            val dd = DocDef(doc, t)
+            val pos = doc.pos.withEnd(t.pos.endOrPoint)
+            dd setPos (if (t eq main) pos else pos.makeTransparent) 
+        }
+      }
       else trees
     }
 
@@ -540,7 +548,11 @@ self =>
         val opinfo = opstack.head
         opstack = opstack.tail
         val opPos = r2p(opinfo.offset, opinfo.offset, opinfo.offset+opinfo.operator.length)
-        top = atPos(opinfo.operand.pos.startOrPoint, opinfo.offset) {
+        val lPos = opinfo.operand.pos
+        val start = if (lPos.isDefined) lPos.startOrPoint else  opPos.startOrPoint
+        val rPos = top.pos
+        val end = if (rPos.isDefined) rPos.endOrPoint else opPos.endOrPoint
+        top = atPos(start, opinfo.offset, end) {
           makeBinop(isExpr, opinfo.operand, opinfo.operator, top, opPos)
         }
       }
@@ -945,7 +957,7 @@ self =>
      */
     def statement(location: Int): Tree = expr(location) // !!! still needed?
 
-    /** Expr       ::= (Bindings | Id | `_')  `=>' Expr
+    /** Expr       ::= (Bindings | [`implicit'] Id | `_')  `=>' Expr
      *               | Expr1
      *  ResultExpr ::= (Bindings | Id `:' CompoundType) `=>' Block
      *               | Expr1
@@ -1044,6 +1056,14 @@ self =>
       case THROW =>
         atPos(in.skipToken()) { 
           Throw(expr()) 
+        }
+      case IMPLICIT =>
+        val start = in.skipToken()
+        val param0 = convertToParam(atPos(in.offset)(Ident(ident())))
+        val param = treeCopy.ValDef(param0, param0.mods | Flags.IMPLICIT, param0.name, param0.tpt, param0.rhs)
+        atPos(start, in.offset) {
+          accept(ARROW)
+          Function(List(param), if (location != InBlock) expr() else block())
         }
       case _ =>
         var t = postfixExpr()
@@ -1147,7 +1167,8 @@ self =>
         atPos(in.offset) {
           val name = unaryOp()
           in.token match {
-            case INTLIT | LONGLIT | FLOATLIT | DOUBLELIT => literal(true)
+            // Don't include double and float here else we lose -0.0
+            case INTLIT | LONGLIT => literal(true)
             case _ => Select(stripParens(simpleExpr()), name)
           }
         }
@@ -1543,17 +1564,19 @@ self =>
      */
     private def normalize(mods: Modifiers): Modifiers = 
       if ((mods hasFlag Flags.PRIVATE) && mods.privateWithin != nme.EMPTY.toTypeName)
-        mods &~ Flags.PRIVATE
+        normalize(mods &~ Flags.PRIVATE)
       else if ((mods hasFlag Flags.ABSTRACT) && (mods hasFlag Flags.OVERRIDE))
-        mods &~ (Flags.ABSTRACT | Flags.OVERRIDE) | Flags.ABSOVERRIDE
+        normalize(mods &~ (Flags.ABSTRACT | Flags.OVERRIDE) | Flags.ABSOVERRIDE)
       else
         mods
 
-    private def addMod(mods: Modifiers, mod: Long): Modifiers = {
+    private def addMod(mods: Modifiers, mod: Long, pos: Position): Modifiers = {
       if (mods hasFlag mod) syntaxError(in.offset, "repeated modifier", false)
       in.nextToken()
-      mods | mod
+      (mods | mod) withPosition (mod, pos)
     }
+
+    private def tokenRange(token: TokenData) = r2p(token.offset, token.offset, token.offset + token.name.length - 1)
 
     /** AccessQualifier ::= "[" (Id | this) "]"
      */
@@ -1588,21 +1611,21 @@ self =>
     def modifiers(): Modifiers = normalize {
       def loop(mods: Modifiers): Modifiers = in.token match {
         case ABSTRACT =>
-          loop(addMod(mods, Flags.ABSTRACT))
+          loop(addMod(mods, Flags.ABSTRACT, tokenRange(in)))
         case FINAL =>
-          loop(addMod(mods, Flags.FINAL))
+          loop(addMod(mods, Flags.FINAL, tokenRange(in)))
         case SEALED =>
-          loop(addMod(mods, Flags.SEALED))
+          loop(addMod(mods, Flags.SEALED, tokenRange(in)))
         case PRIVATE =>
-          loop(accessQualifierOpt(addMod(mods, Flags.PRIVATE)))
+          loop(accessQualifierOpt(addMod(mods, Flags.PRIVATE, tokenRange(in))))
         case PROTECTED =>
-          loop(accessQualifierOpt(addMod(mods, Flags.PROTECTED)))
+          loop(accessQualifierOpt(addMod(mods, Flags.PROTECTED, tokenRange(in))))
         case OVERRIDE =>
-          loop(addMod(mods, Flags.OVERRIDE))
+          loop(addMod(mods, Flags.OVERRIDE, tokenRange(in)))
         case IMPLICIT =>
-          loop(addMod(mods, Flags.IMPLICIT))
+          loop(addMod(mods, Flags.IMPLICIT, tokenRange(in)))
         case LAZY =>
-          loop(addMod(mods, Flags.LAZY))
+          loop(addMod(mods, Flags.LAZY, tokenRange(in)))
         case NEWLINE =>
           in.nextToken()
           loop(mods)
@@ -1618,15 +1641,15 @@ self =>
     def localModifiers(): Modifiers = {
       def loop(mods: Modifiers): Modifiers = in.token match {
         case ABSTRACT =>
-          loop(addMod(mods, Flags.ABSTRACT))
+          loop(addMod(mods, Flags.ABSTRACT, tokenRange(in)))
         case FINAL =>
-          loop(addMod(mods, Flags.FINAL))
+          loop(addMod(mods, Flags.FINAL, tokenRange(in)))
         case SEALED =>
-          loop(addMod(mods, Flags.SEALED))
+          loop(addMod(mods, Flags.SEALED, tokenRange(in)))
         case IMPLICIT =>
-          loop(addMod(mods, Flags.IMPLICIT))
+          loop(addMod(mods, Flags.IMPLICIT, tokenRange(in)))
         case LAZY =>
-          loop(addMod(mods, Flags.LAZY))
+          loop(addMod(mods, Flags.LAZY, tokenRange(in)))
         case _ =>
           mods
       }
@@ -1887,11 +1910,13 @@ self =>
         } else {
           t = id
         }
+        t setPos t.pos.makeTransparent
       }
       def loop(): Tree =
         if (in.token == USCORE) {
+          val uscoreOffset = in.offset
           in.nextToken()
-          Import(t, List((nme.WILDCARD, null)))
+          Import(t, List(ImportSelector(nme.WILDCARD, uscoreOffset, null, -1)))
         } else if (in.token == LBRACE) {
           Import(t, importSelectors())
         } else {
@@ -1901,10 +1926,11 @@ self =>
             t = atPos(start, if (name == nme.ERROR) in.offset else nameOffset) {
               Select(t, name)
             }
+            t setPos t.pos.makeTransparent
             in.nextToken()
             loop()
           } else {
-            Import(t, List((name, name)))
+            Import(t, List(ImportSelector(name, nameOffset, name, nameOffset)))
           }
         }
       atPos(start) { loop() }
@@ -1912,8 +1938,8 @@ self =>
       
     /** ImportSelectors ::= `{' {ImportSelector `,'} (ImportSelector | `_') `}'
      */
-    def importSelectors(): List[(Name, Name)] = {
-      val names = new ListBuffer[(Name, Name)]
+    def importSelectors(): List[ImportSelector] = {
+      val names = new ListBuffer[ImportSelector]
       accept(LBRACE)
       var isLast = importSelector(names)
       while (!isLast && in.token == COMMA) {
@@ -1926,19 +1952,31 @@ self =>
 
     /** ImportSelector ::= Id [`=>' Id | `=>' `_']
      */
-    def importSelector(names: ListBuffer[(Name, Name)]): Boolean =
+    def importSelector(names: ListBuffer[ImportSelector]): Boolean =
       if (in.token == USCORE) {
-        in.nextToken(); names += ((nme.WILDCARD, null)); true
+        val uscoreOffset = in.offset
+        in.nextToken(); names += ImportSelector(nme.WILDCARD, uscoreOffset, null, -1); true
       } else {
+        val nameOffset = in.offset
         val name = ident()
-        names += ((
-          name,
+        
+        val (name1, name1Offset) =
           if (in.token == ARROW) {
             in.nextToken()
-            if (in.token == USCORE) { in.nextToken(); nme.WILDCARD } else ident()
+            if (in.token == USCORE) {
+              val uscoreOffset = in.offset
+              in.nextToken();
+              (nme.WILDCARD, uscoreOffset)
+            } else {
+              val renameOffset = in.offset
+              val rename = ident() 
+              (rename, renameOffset)
+            }
           } else {
-            name
-          }))
+            (name, nameOffset)
+          }
+        
+        names += ImportSelector(name, nameOffset, name1, name1Offset)
         false
       }
     
@@ -1952,39 +1990,35 @@ self =>
      *           | def FunDcl
      *           | type [nl] TypeDcl
      */
-    def defOrDcl(mods: Modifiers): List[Tree] = {
+    def defOrDcl(pos: Int, mods: Modifiers): List[Tree] = {
       if ((mods hasFlag Flags.LAZY) && in.token != VAL)
         syntaxError("lazy not allowed here. Only vals can be lazy", false)
       in.token match {
         case VAL =>
-          patDefOrDcl(mods)
+          patDefOrDcl(pos, mods withPosition(VAL, tokenRange(in)))
         case VAR =>
-          patDefOrDcl(mods | Flags.MUTABLE)
+          patDefOrDcl(pos, (mods | Flags.MUTABLE) withPosition (VAR, tokenRange(in)))
         case DEF =>
-          List(funDefOrDcl(mods))
+          List(funDefOrDcl(pos, mods withPosition(DEF, tokenRange(in))))
         case TYPE =>
-          List(typeDefOrDcl(mods))
+          List(typeDefOrDcl(pos, mods withPosition(TYPE, tokenRange(in))))
         case _ =>
-          List(tmplDef(mods))
+          List(tmplDef(pos, mods))
       }
     }
-    /** IDE hook: for non-local defs or dcls with modifiers and annotations */
+    
+    private def caseAwareTokenOffset = if (in.token == CASECLASS || in.token == CASEOBJECT) in.prev.offset else in.offset
+
     def nonLocalDefOrDcl : List[Tree] = {
       val annots = annotations(true, false)
-      defOrDcl(modifiers() withAnnotations annots)
+      defOrDcl(caseAwareTokenOffset, modifiers() withAnnotations annots)
     }
-    /** not hooked by the IDE, will not undergo stubbing. Used for early initialization blocks. */
-    def preNonLocalDefOrDcl : List[Tree] = {
-      val annots = annotations(true, false)
-      defOrDcl(modifiers() withAnnotations annots)
-    }
-    
     
     /** PatDef ::= Pattern2 {`,' Pattern2} [`:' Type] `=' Expr
      *  ValDcl ::= Id {`,' Id} `:' Type
      *  VarDef ::= PatDef | Id {`,' Id} `:' Type `=' `_'
      */
-    def patDefOrDcl(mods: Modifiers): List[Tree] = {
+    def patDefOrDcl(pos : Int, mods: Modifiers): List[Tree] = {
       var newmods = mods
       val lhsBuf = new ListBuffer[Tree]
       do {
@@ -2025,7 +2059,11 @@ self =>
         }
         trees
       }
-      (lhs.toList.init flatMap (mkDefs(_, tp.duplicate, rhs.duplicate))) ::: mkDefs(lhs.last, tp, rhs)
+      val trees = (lhs.toList.init flatMap (mkDefs(_, tp.duplicate, rhs.duplicate))) ::: mkDefs(lhs.last, tp, rhs)
+      val hd = trees.head
+      hd setPos hd.pos.withStart(pos)
+      ensureNonOverlapping(hd, trees.tail)
+      trees
     }
 
     /** VarDef ::= PatDef
@@ -2060,8 +2098,8 @@ self =>
      *  FunDcl ::= FunSig [`:' Type]
      *  FunSig ::= id [FunTypeParamClause] ParamClauses
      */
-    def funDefOrDcl(mods: Modifiers): Tree = {
-      val start = in.skipToken() 
+    def funDefOrDcl(start : Int, mods: Modifiers): Tree = {
+      in.nextToken
       if (in.token == THIS) {  
         atPos(start, in.skipToken()) {
           val vparamss = paramClauses(nme.CONSTRUCTOR, classContextBounds map (_.duplicate), false)
@@ -2086,7 +2124,13 @@ self =>
           val tparams = typeParamClauseOpt(name, contextBoundBuf)
           val vparamss = paramClauses(name, contextBoundBuf.toList, false)
           newLineOptWhenFollowedBy(LBRACE)
-          var restype = typedOpt()
+          val savedInFunReturnType = inFunReturnType
+          var restype = try {
+            inFunReturnType = true
+            typedOpt()
+          } finally {
+            inFunReturnType = savedInFunReturnType
+          }
           val rhs =
             if (isStatSep || in.token == RBRACE) {
               if (restype.isEmpty) restype = scalaUnitConstr
@@ -2139,8 +2183,8 @@ self =>
     /** TypeDef ::= type Id [TypeParamClause] `=' Type
      *  TypeDcl ::= type Id [TypeParamClause] TypeBounds
      */
-    def typeDefOrDcl(mods: Modifiers): Tree = {
-      val start = in.skipToken()
+    def typeDefOrDcl(start: Int, mods: Modifiers): Tree = {
+      in.nextToken
       newLinesOpt()
       atPos(start, in.offset) {
         val name = ident().toTypeName
@@ -2162,27 +2206,28 @@ self =>
     /** Hook for IDE, for top-level classes/objects */
     def topLevelTmplDef: Tree = {
       val annots = annotations(true, false)
+      val pos = caseAwareTokenOffset
       val mods = modifiers() withAnnotations annots
-      tmplDef(mods)
+      tmplDef(pos, mods)
     }
     
     /**  TmplDef ::= [case] class ClassDef
      *            |  [case] object ObjectDef
      *            |  [override] trait TraitDef
      */
-    def tmplDef(mods: Modifiers): Tree = {
+    def tmplDef(pos: Int, mods: Modifiers): Tree = {
       if (mods.hasFlag(Flags.LAZY)) syntaxError("classes cannot be lazy", false)
       in.token match {
         case TRAIT =>
-          classDef(mods | Flags.TRAIT | Flags.ABSTRACT)
+          classDef(pos, (mods | Flags.TRAIT | Flags.ABSTRACT) withPosition (Flags.TRAIT, tokenRange(in)))
         case CLASS =>
-          classDef(mods)
+          classDef(pos, mods)
         case CASECLASS =>
-          classDef(mods | Flags.CASE)
+          classDef(pos, (mods | Flags.CASE) withPosition (Flags.CASE, tokenRange(in.prev /*scanner skips on 'case' to 'class', thus take prev*/)))
         case OBJECT =>
-          objectDef(mods)
+          objectDef(pos, mods)
         case CASEOBJECT =>
-          objectDef(mods | Flags.CASE)
+          objectDef(pos, (mods | Flags.CASE) withPosition (Flags.CASE, tokenRange(in.prev /*scanner skips on 'case' to 'object', thus take prev*/)))
         case _ =>
           syntaxErrorOrIncomplete("expected start of definition", true)
           EmptyTree
@@ -2193,8 +2238,8 @@ self =>
                      [AccessModifier] ClassParamClauses RequiresTypeOpt ClassTemplateOpt
      *  TraitDef ::= Id [TypeParamClause] RequiresTypeOpt TraitTemplateOpt
      */
-    def classDef(mods: Modifiers): ClassDef = {
-      val start = in.skipToken() 
+    def classDef(start: Int, mods: Modifiers): ClassDef = {
+      in.nextToken
       val nameOffset = in.offset
       val name = ident().toTypeName
       atPos(start, if (name == nme.ERROR.toTypeName) start else nameOffset) {
@@ -2220,6 +2265,10 @@ self =>
         val template = templateOpt(mods1, name, constrMods withAnnotations constrAnnots, vparamss, tstart)
         if (isInterface(mods1, template.body)) mods1 |= Flags.INTERFACE 
         val result = ClassDef(mods1, name, tparams, template)
+        // Context bounds generate implicit parameters (part of the template) with types
+        // from tparams: we need to ensure these don't overlap
+        if (!classContextBounds.isEmpty)
+          ensureNonOverlapping(template, tparams)
         classContextBounds = savedContextBounds
         result
       }
@@ -2227,8 +2276,8 @@ self =>
 
     /** ObjectDef       ::= Id ClassTemplateOpt
      */
-    def objectDef(mods: Modifiers): ModuleDef = {
-      val start = in.skipToken() 
+    def objectDef(start: Int, mods: Modifiers): ModuleDef = {
+      in.nextToken
       val nameOffset = in.offset
       val name = ident()
       val tstart = in.offset
@@ -2304,9 +2353,9 @@ self =>
           in.nextToken()
           template(mods hasFlag Flags.TRAIT)
         } else if ((in.token == SUBTYPE) && (mods hasFlag Flags.TRAIT)) {
-	  in.nextToken()
+          in.nextToken()
           template(true)
-	} else {
+        } else {
           newLineOptWhenFollowedBy(LBRACE)
           val (self, body) = templateBodyOpt(false)
           (List(), List(List()), self, body)
@@ -2406,9 +2455,9 @@ self =>
       while (in.token != RBRACE && in.token != EOF) {
         if (in.token == PACKAGE) {
           val start = in.skipToken()
-	  stats += {
-	    if (in.token == OBJECT) makePackageObject(start, objectDef(NoMods))
-	    else packaging(start)
+          stats += {
+            if (in.token == OBJECT) makePackageObject(start, objectDef(in.offset, NoMods))
+            else packaging(start)
           }
         } else if (in.token == IMPORT) {
           stats ++= importClause()
@@ -2467,9 +2516,7 @@ self =>
         } else if (isExprIntro) {
           stats += statement(InTemplate)
         } else if (isDefIntro || isModifier || in.token == LBRACKET /*todo: remove */ || in.token == AT) {
-          if (isPre) // @S: avoid caching by calling a different method that does the same thing (except in the IDE) 
-            stats ++= joinComment(preNonLocalDefOrDcl)
-          else stats ++= joinComment(nonLocalDefOrDcl)
+          stats ++= joinComment(nonLocalDefOrDcl)
         } else if (!isStatSep) {
           syntaxErrorOrIncomplete("illegal start of definition", true)
         }
@@ -2478,8 +2525,6 @@ self =>
       (self, stats.toList)
     }
      
-     
-
     /** RefineStatSeq    ::= RefineStat {semi RefineStat}
      *  RefineStat       ::= Dcl
      *                     | type TypeDef
@@ -2489,9 +2534,12 @@ self =>
       val stats = new ListBuffer[Tree]
       while (in.token != RBRACE && in.token != EOF) {
         if (isDclIntro) { // don't IDE hook
-          stats ++= joinComment(defOrDcl(NoMods))
+          stats ++= joinComment(defOrDcl(in.offset, NoMods))
         } else if (!isStatSep) {
-          syntaxErrorOrIncomplete("illegal start of declaration", true)
+          syntaxErrorOrIncomplete(
+            "illegal start of declaration"+
+            (if (inFunReturnType) " (possible cause: missing `=' in front of current method body)"
+             else ""), true)
         }
         if (in.token != RBRACE) acceptStatSep()
       }
@@ -2514,9 +2562,10 @@ self =>
 
     def localDef : List[Tree] = {
       val annots = annotations(true, false)
+      val pos = in.offset
       val mods = localModifiers() withAnnotations annots
-      if (!(mods hasFlag ~(Flags.IMPLICIT | Flags.LAZY))) defOrDcl(mods)
-      else List(tmplDef(mods))
+      if (!(mods hasFlag ~(Flags.IMPLICIT | Flags.LAZY))) defOrDcl(pos, mods)
+      else List(tmplDef(pos, mods))
     }
 
     /** BlockStatSeq ::= { BlockStat semi } [ResultExpr]
@@ -2558,13 +2607,13 @@ self =>
         val start = in.offset
         if (in.token == PACKAGE) {
           in.nextToken()
-	  if (in.token == OBJECT) {
-	    ts += makePackageObject(start, objectDef(NoMods))
-	    if (in.token != EOF) {
-	      acceptStatSep()
-	      ts ++= topStatSeq()
-	    }
-	  } else {
+          if (in.token == OBJECT) {
+            ts += makePackageObject(start, objectDef(in.offset, NoMods))
+            if (in.token != EOF) {
+              acceptStatSep()
+              ts ++= topStatSeq()
+            }
+          } else {
             val pkg = qualId()
             newLineOptWhenFollowedBy(LBRACE)
             if (in.token == EOF) {
@@ -2578,13 +2627,13 @@ self =>
               accept(RBRACE)
               ts ++= topStatSeq()
             }
-	  }
+          }
         } else {
           ts ++= topStatSeq()
         }
         ts.toList
       }
-      val start = in.offset max 0
+      val start = caseAwareTokenOffset max 0
       topstats() match {        
         case List(stat @ PackageDef(_, _)) => stat
         case stats => makePackaging(start, atPos(o2p(start)) { Ident(nme.EMPTY_PACKAGE_NAME) }, stats)

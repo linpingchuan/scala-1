@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2005-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2005-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -75,7 +75,7 @@ object RemoteActor {
       kernels -= s
       // terminate `kern` when it does
       // not appear as value any more
-      if (!kernels.values.contains(kern)) {
+      if (!kernels.valuesIterator.contains(kern)) {
         Debug.info("terminating "+kern)
         // terminate NetKernel
         kern.terminate()

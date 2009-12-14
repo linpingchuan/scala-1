@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -72,6 +72,6 @@ trait SortedMap[A, +B] extends Map[A, B]
  * @since 2.4
  */
 object SortedMap extends ImmutableSortedMapFactory[SortedMap] {
-  implicit def builderFactory[A, B](implicit ord: Ordering[A]): BuilderFactory[(A, B), SortedMap[A, B], Coll] = new SortedMapBuilderFactory[A, B]
+  implicit def canBuildFrom[A, B](implicit ord: Ordering[A]): CanBuildFrom[Coll, (A, B), SortedMap[A, B]] = new SortedMapCanBuildFrom[A, B]
   def empty[A, B](implicit ord: Ordering[A]): SortedMap[A, B] = TreeMap.empty[A, B]
 }

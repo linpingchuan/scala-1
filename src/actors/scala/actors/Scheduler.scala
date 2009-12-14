@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2005-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2005-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -11,11 +11,11 @@
 package scala.actors
 
 import java.util.concurrent._
-import scheduler.{DelegatingScheduler, ThreadPoolConfig, ThreadPoolScheduler, ForkJoinScheduler, DefaultThreadPoolScheduler}
+import scheduler.{DelegatingScheduler, ForkJoinScheduler, ResizableThreadPoolScheduler, ThreadPoolConfig}
 
 /**
  * The <code>Scheduler</code> object is used by <code>Actor</code> to
- * execute tasks of an execution of an actor.
+ * execute tasks of an actor execution.
  *
  * @author Philipp Haller
  */
@@ -24,11 +24,17 @@ object Scheduler extends DelegatingScheduler {
   Debug.info("initializing "+this+"...")
 
   def makeNewScheduler: IScheduler = {
-    val s = new DefaultThreadPoolScheduler(false)
-    //val s = new ForkJoinScheduler
-    Debug.info(this+": starting new "+s+" ["+s.getClass+"]")
-    s.start()
-    s
+    val sched = if (!ThreadPoolConfig.useForkJoin) {
+      val s = new ResizableThreadPoolScheduler(false)
+      s.start()
+      s
+    } else {
+      val s = new ForkJoinScheduler
+      s.start()
+      s
+    }
+    Debug.info(this+": starting new "+sched+" ["+sched.getClass+"]")
+    sched
   }
 
   /* Only <code>ForkJoinScheduler</code> implements this method.

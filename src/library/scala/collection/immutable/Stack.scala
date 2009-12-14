@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -33,7 +33,7 @@ object Stack {
  *  @since   1
  */
 @serializable @SerialVersionUID(1976480595012942526L)
-class Stack[+A] protected (protected val elems: List[A]) extends Sequence[A] {
+class Stack[+A] protected (protected val elems: List[A]) extends Seq[A] {
 
   def this() = this(Nil)
 
@@ -69,7 +69,6 @@ class Stack[+A] protected (protected val elems: List[A]) extends Sequence[A] {
    *
    *  @param   elems      the iterator object.
    *  @return the stack with the new elements on top.
-   *  @deprecated
    */
   def pushAll[B >: A](elems: Iterator[B]): Stack[B] =
     ((this: Stack[B]) /: elems)(_ push _)

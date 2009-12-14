@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -12,9 +12,10 @@
 package scala.xml
 
 import collection.immutable
-import collection.SequenceLike
+import collection.immutable.{List, Nil, ::}
+import collection.{Seq, SeqLike}
 import collection.mutable.{Builder, ListBuffer}
-import collection.generic.BuilderFactory
+import collection.generic.CanBuildFrom
 
 /** This object ...
  *
@@ -27,7 +28,11 @@ object NodeSeq {
     def theSeq = s
   }
   type Coll = NodeSeq
-  implicit def builderFactory: BuilderFactory[Node, NodeSeq, Coll] = new BuilderFactory[Node, NodeSeq, Coll] { def apply(from: Coll) = newBuilder }
+  implicit def canBuildFrom: CanBuildFrom[Coll, Node, NodeSeq] = 
+    new CanBuildFrom[Coll, Node, NodeSeq] { 
+      def apply(from: Coll) = newBuilder 
+      def apply() = newBuilder 
+    }
   def newBuilder: Builder[Node, NodeSeq] = new ListBuffer[Node] mapResult fromSeq
   implicit def seqToNodeSeq(s: Seq[Node]): NodeSeq = fromSeq(s)
 }
@@ -38,7 +43,7 @@ object NodeSeq {
  *  @author  Burak Emir
  *  @version 1.0
  */
-abstract class NodeSeq extends immutable.Sequence[Node] with SequenceLike[Node, NodeSeq] {
+abstract class NodeSeq extends immutable.Seq[Node] with SeqLike[Node, NodeSeq] {
   import NodeSeq.seqToNodeSeq // import view magic for NodeSeq wrappers
 
   /** Creates a list buffer as builder for this class */
@@ -51,7 +56,7 @@ abstract class NodeSeq extends immutable.Sequence[Node] with SequenceLike[Node, 
   def apply(i: Int): Node = theSeq(i)
   def apply(f: Node => Boolean): NodeSeq = filter(f)
 
-  /** structural equality */
+  /** structural equality (XXX - this shatters any hope of hashCode equality) */
   override def equals(x: Any): Boolean = x match {
     case z:Node      => (length == 1) && z == apply(0)
     case z:Seq[_]    => sameElements(z)

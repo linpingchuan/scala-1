@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -40,7 +40,7 @@ trait Map[A, B]
  * Currently this returns a HashMap.
  */
 object Map extends MutableMapFactory[Map] {
-  implicit def builderFactory[A, B]: BuilderFactory[(A, B), Map[A, B], Coll] = new MapBuilderFactory[A, B]
+  implicit def canBuildFrom[A, B]: CanBuildFrom[Coll, (A, B), Map[A, B]] = new MapCanBuildFrom[A, B]
   def empty[A, B]: Map[A, B] = new HashMap[A, B]
 }
 

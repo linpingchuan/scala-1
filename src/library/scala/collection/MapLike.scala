@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -11,35 +11,38 @@
 package scala.collection
 
 import generic._
-import mutable.{Builder, MapBuilder}
+import mutable.{Builder, StringBuilder, MapBuilder}
 import PartialFunction._
 
-/** <p>
- *    A generic template for maps from keys of type <code>A</code> to values
- *    of type <code>B</code>.<br/>
- *    To implement a concrete map, you need to provide implementations of the
- *    following methods (where <code>This</code> is the type of the map in
- *    question):
- *  </p>
- *  <pre>
- *    <b>def</b> get(key: A): Option[B]
- *    <b>def</b> iterator: Iterator[(A, B)]
- *    <b>def</b> + [B1 >: B](kv: (A, B1)): This
- *    <b>def</b> -(key: A): This</pre>
- *  <p>
- *    If you wish that methods <code>like</code>, <code>take</code>, <code>drop</code>,
- *    <code>filter</code> return the same kind of map, you should also override:
- *  </p>
- *  <pre>
- *   <b>def</b> empty: This</pre>
- *  <p>
- *    It is also good idea to override methods <code>foreach</code> and
- *    <code>size</code> for efficiency.
- *  </p>
+/** A template trait for maps of type `Map[A, B]` which associate keys of type `A`
+ *  with values of type `B`.
  *
+ *  @tparam A    the type of the keys.
+ *  @tparam B    the type of associated values.
+ *  @tparam This the type of the `Map` itself.
  *  @author  Martin Odersky
  *  @version 2.8
  *  @since   2.8
+ *  $mapnote
+ *  @define $mapnote  @note 
+ *    To implement a concrete map, you need to provide implementations of the
+ *    following methods
+ *    {{{
+ *       def get(key: A): Option[B]
+ * 
+ *       def iterator: Iterator[(A, B)]
+ *
+ *       def + [B1 >: B](kv: (A, B1)): This
+ * 
+ *       def -(key: A): This</pre>
+ *    }}}
+ *    If you wish that methods like `take`, `drop`, `filter` also return the same kind of map
+ *    you should also override:
+ *    {{{
+ *       def empty: This
+ *    }}}
+ *    It is also good idea to override methods `foreach` and
+ *    `size` for efficiency.
  */
 trait MapLike[A, +B, +This <: MapLike[A, B, This] with Map[A, B]]
   extends PartialFunction[A, B] 
@@ -129,7 +132,7 @@ self =>
 
   protected class DefaultKeySet extends Set[A] {
     def contains(key : A) = self.contains(key)
-    def iterator = self.iterator.map(_._1)
+    def iterator = keysIterator
     def + (elem: A): Set[A] = (Set[A]() ++ this + elem).asInstanceOf[Set[A]] // !!! concrete overrides abstract problem
     def - (elem: A): Set[A] = (Set[A]() ++ this - elem).asInstanceOf[Set[A]] // !!! concrete overrides abstract problem
     override def size = self.size
@@ -155,10 +158,10 @@ self =>
 
   /** @return the values of this map as an iterable.
    */
-  def valueIterable: Iterable[B] = new DefaultValuesIterable
+  def valuesIterable: Iterable[B] = new DefaultValuesIterable
 
   protected class DefaultValuesIterable extends Iterable[B] {
-    def iterator = self.iterator.map(_._2)
+    def iterator = valuesIterator
     override def size = self.size
     override def foreach[C](f: B => C) = for ((k, v) <- self) f(v)
   }

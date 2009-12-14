@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2002-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2002-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -12,7 +12,6 @@
 package scala.collection
 package mutable
 
-import Predef._
 import scala.reflect.ClassManifest
 import scala.collection.generic._
 
@@ -23,7 +22,7 @@ import scala.collection.generic._
  *  @version 1.0
  *  @since 2.8
  */
-abstract class WrappedArray[T] extends Vector[T] with ArrayLike[T, WrappedArray[T]] {
+abstract class WrappedArray[T] extends IndexedSeq[T] with ArrayLike[T, WrappedArray[T]] {
 
   override protected[this] def thisCollection: WrappedArray[T] = this
   override protected[this] def toCollection(repr: WrappedArray[T]): WrappedArray[T] = repr
@@ -42,9 +41,8 @@ abstract class WrappedArray[T] extends Vector[T] with ArrayLike[T, WrappedArray[
 
   /** The underlying array */
   def array: Array[T]                                                                                                   
-
-  override def stringPrefix = "Array"
-
+  override def stringPrefix = "WrappedArray"
+ 
   /** Creates new builder for this collection ==> move to subclasses
    */
   override protected[this] def newBuilder: Builder[T, WrappedArray[T]] = 
@@ -66,13 +64,15 @@ object WrappedArray {
     case x: Array[Unit] => wrapUnitArray(x).asInstanceOf[WrappedArray[T]]
   }
 
-  implicit def builderFactory[T](implicit m: ClassManifest[T]): BuilderFactory[T, WrappedArray[T], WrappedArray[_]] =
-    new BuilderFactory[T, WrappedArray[T], WrappedArray[_]] {
+  implicit def canBuildFrom[T](implicit m: ClassManifest[T]): CanBuildFrom[WrappedArray[_], T, WrappedArray[T]] =
+    new CanBuildFrom[WrappedArray[_], T, WrappedArray[T]] {
       def apply(from: WrappedArray[_]): Builder[T, WrappedArray[T]] =
+        ArrayBuilder.make[T]()(m) mapResult WrappedArray.make[T]
+      def apply: Builder[T, WrappedArray[T]] =
         ArrayBuilder.make[T]()(m) mapResult WrappedArray.make[T]
   }
     
-  def newBuilder[A]: Builder[A, Vector[A]] = new ArrayBuffer
+  def newBuilder[A]: Builder[A, IndexedSeq[A]] = new ArrayBuffer
 
   @serializable
   final class ofRef[T <: AnyRef](val array: Array[T]) extends WrappedArray[T] {

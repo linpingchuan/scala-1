@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2002-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2002-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -31,7 +31,7 @@ abstract class BasicTransformer extends Function1[Node,Node]
    *  to NodeBuffer.
    */
   def transform(it: Iterator[Node], nb: NodeBuffer): Seq[Node] =
-    it.foldLeft(nb)(_ ++= transform(_)).toSequence
+    it.foldLeft(nb)(_ ++= transform(_)).toSeq
 
   /** Call transform(Node) to each node in ns, yield ns if nothing changes,
    *  otherwise a new sequence of concatenated results.

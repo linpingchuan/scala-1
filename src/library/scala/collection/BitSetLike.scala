@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -13,6 +13,7 @@ package scala.collection
 
 import BitSetLike._
 import generic._
+import mutable.StringBuilder
 
 /** common base class for mutable and immutable bit sets
  *
@@ -129,6 +130,8 @@ trait BitSetLike[+This <: BitSetLike[This] with Set[Int]] extends SetLike[Int, T
       }
     sb append end
   }
+
+  override def stringPrefix = "BitSet"                                                                                      
 }
 
 object BitSetLike {

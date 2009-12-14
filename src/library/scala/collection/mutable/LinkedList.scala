@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -11,7 +11,7 @@
 
 package scala.collection.mutable
 
-import scala.collection.generic.{ GenericTraversableTemplate, SequenceFactory, GenericCompanion, BuilderFactory }
+import scala.collection.{ generic => gen }
 import scala.{ collection => col }
 
 /** This class implements single linked lists where both the head (<code>elem</code>)
@@ -19,12 +19,13 @@ import scala.{ collection => col }
  *
  *  @author Matthias Zenger
  *  @author Martin Odersky
+ *  @author Erik Engbrecht
  *  @version 2.8
  */
-@serializable
-class LinkedList[A] extends Sequence[A]
-                       with col.LinearSequence[A]
-                       with GenericTraversableTemplate[A, LinkedList]
+@serializable @SerialVersionUID(-7308240733518833071L)
+class LinkedList[A] extends Seq[A]
+                       with col.LinearSeq[A]
+                       with gen.GenericTraversableTemplate[A, LinkedList]
                        with LinkedListLike[A, LinkedList[A]]  {
   def this(v: A) {
    this()
@@ -38,12 +39,13 @@ class LinkedList[A] extends Sequence[A]
     builder ++= seq
     builder.result()
   }
-  override def companion: GenericCompanion[LinkedList] = LinkedList  //TODO: should this be a lower class, such as SequenceFactory?
+  override def companion: gen.GenericCompanion[LinkedList] = LinkedList  //TODO: should this be a lower class, such as SeqFactory?
 }
 
-object LinkedList extends SequenceFactory[LinkedList] {
-  implicit def builderFactory[A]: BuilderFactory[A, LinkedList[A], Coll] = new VirtualBuilderFactory[A]
-  
+object LinkedList extends gen.SeqFactory[LinkedList] {
+  //implicit def builderFactory[A]: BuilderFactory[A, LinkedList[A], Coll] = new VirtualBuilderFactory[A]
+  implicit def canBuildFrom[A]: gen.CanBuildFrom[Coll, A, LinkedList[A]] = new GenericCanBuildFrom[A]  // comes from generic.TraversableFactory
+
   //override def empty[A] = new LinkedList[A]
   def newBuilder[A] = new Builder[A, LinkedList[A]] {
     var front: LinkedList[A] = _

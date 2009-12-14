@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2009 LAMP/EPFL
+ * Copyright 2005-2010 LAMP/EPFL
  * @author  Martin Odersky
  */
 // $Id$
@@ -14,7 +14,7 @@ import java.lang.Integer.toHexString
 import scala.collection.immutable.{Map, ListMap}
 import scala.collection.mutable.{ListBuffer, ArrayBuffer}
 import scala.tools.nsc.io.AbstractFile
-import scala.tools.nsc.util.{Position, NoPosition}
+import scala.tools.nsc.util.{Position, NoPosition, ClassRep}
 import scala.annotation.switch
 
 /** This abstract class implements a class file parser.
@@ -23,8 +23,6 @@ import scala.annotation.switch
  *  @version 1.0
  */
 abstract class ClassfileParser {
-  def sourcePath : AbstractFile = null
-
   val global: Global
   import global._
 
@@ -40,7 +38,7 @@ abstract class ClassfileParser {
   protected var isScala: Boolean = _        // does class file describe a scala class?
   protected var isScalaRaw: Boolean = _     // this class file is a scala class with no pickled info
   protected var hasMeta: Boolean = _        // does class file contain jaco meta attribute?s
-  protected var busy: Boolean = false       // lock to detect recursive reads
+  protected var busy: Option[Symbol] = None // lock to detect recursive reads
   private var   externalName: Name = _      // JVM name of the current class
   protected var classTParams = Map[Name,Symbol]()
 
@@ -65,8 +63,13 @@ abstract class ClassfileParser {
         else e.getClass.toString
       } + ")")
     }
-    assert(!busy, "internal error: illegal class file dependency")
-    busy = true
+    assert(!busy.isDefined, {
+      val (s1, s2) = (busy.get, root)
+      if (s1 eq s2) "unsatisfiable cyclic dependency in '%s'".format(s1)
+      else "illegal class file dependency between '%s' and '%s'".format(s1, s2)
+    })
+      
+    busy = Some(root)
     /*root match {
       case cs: ClassSymbol =>
         cs.classFile = file
@@ -95,7 +98,7 @@ abstract class ClassfileParser {
       case e: RuntimeException        => handleError(e)
     }
   } finally {
-    busy = false
+    busy = None
   }
 
   protected def statics: Symbol = staticModule.moduleClass
@@ -405,23 +408,36 @@ abstract class ClassfileParser {
     var nameIdx = in.nextChar
     externalName = pool.getClassName(nameIdx)
     val c = if (externalName.toString.indexOf('$') < 0) pool.getClassSymbol(nameIdx) else clazz
+
+    /** Parse parents for Java classes. For Scala, return AnyRef, since the real type will be unpickled.
+     *  Updates the read pointer of 'in'. */
+    def parseParents: List[Type] = {
+      if (isScala) {
+        in.nextChar              // skip superclass
+        val ifaces = in.nextChar
+        in.bp += ifaces * 2     // .. and iface count interfaces
+        List(definitions.AnyRefClass.tpe) // dummy superclass, will be replaced by pickled information
+      } else {
+        val superType = if (isAnnotation) { in.nextChar; definitions.AnnotationClass.tpe }
+                        else pool.getSuperClass(in.nextChar).tpe
+        val ifaceCount = in.nextChar
+        var ifaces = for (i <- List.range(0, ifaceCount)) yield pool.getSuperClass(in.nextChar).tpe
+        if (isAnnotation) ifaces = definitions.ClassfileAnnotationClass.tpe :: ifaces
+        superType :: ifaces
+      }
+    }
+    
     if (c != clazz && externalName.toString.indexOf("$") < 0) {
       if ((clazz eq NoSymbol) && (c ne NoSymbol)) clazz = c
       else throw new IOException("class file '" + in.file + "' contains wrong " + c)
     }
     
     addEnclosingTParams(clazz)
-    parseInnerClasses()
-    val superType = if (isAnnotation) { in.nextChar; definitions.AnnotationClass.tpe }
-                    else pool.getSuperClass(in.nextChar).tpe
-    val ifaceCount = in.nextChar
-    var ifaces = for (i <- List.range(0, ifaceCount)) yield pool.getSuperClass(in.nextChar).tpe
-    if (isAnnotation) ifaces = definitions.ClassfileAnnotationClass.tpe :: ifaces
-    val parents = superType :: ifaces
-    // get the class file parser to reuse scopes. 
-    instanceDefs = newClassScope(clazz)
-    staticDefs = newClassScope(statics)
-    val classInfo = ClassInfoType(parents, instanceDefs, clazz)
+    parseInnerClasses() // also sets the isScala / isScalaRaw / hasMeta flags, see r15956
+    // get the class file parser to reuse scopes.
+    instanceDefs = new Scope
+    staticDefs = new Scope
+    val classInfo = ClassInfoType(parseParents, instanceDefs, clazz)
     val staticInfo = ClassInfoType(List(), staticDefs, statics)
 
     if (!isScala && !isScalaRaw) {
@@ -608,9 +624,9 @@ abstract class ClassfileParser {
                         case '*' => mkTypeBounds(definitions.NothingClass.tpe,
                                                  definitions.AnyClass.tpe)
                       }
-                      val newtparam = makeExistential("?"+i, sym, bounds)
+                      val newtparam = sym.newExistential(sym.pos, "?"+i) setInfo bounds
                       existentials += newtparam
-                      xs += newtparam.tpe
+                      xs += newtparam.tpe //@M should probably be .tpeHK
                       i += 1
                     case _ => 
                       xs += sig2type(tparams, skiptvs)
@@ -773,20 +789,7 @@ abstract class ClassfileParser {
           val meta = pool.getName(in.nextChar).toString().trim()
           metaParser.parse(meta, sym, symtype)
           this.hasMeta = true
-        case nme.SourceFileATTR =>
-          assert(attrLen == 2)
-          val source = pool.getName(in.nextChar)
-          if (sourcePath ne null) {
-            val sourceFile0 = sourcePath.lookupPath(source.toString(), false)
-            if ((sourceFile0 ne null) && (clazz.sourceFile eq null)) {
-              clazz.sourceFile = sourceFile0
-            }
-            // XXX: removing only in IDE test. Also needs to be tested in the build compiler.
-            if (staticModule.moduleClass != NoSymbol) {
-              staticModule.moduleClass.sourceFile = clazz.sourceFile
-            }
-          }
-        // Attribute on methods of java annotation classes when that method has a default
+         // Attribute on methods of java annotation classes when that method has a default
         case nme.AnnotationDefaultATTR =>
           sym.addAnnotation(AnnotationInfo(definitions.AnnotationDefaultAttr.tpe, List(), List()))
           in.skip(attrLen)
@@ -900,7 +903,7 @@ abstract class ClassfileParser {
 
       val innerClass = getOwner(jflags).newClass(NoPosition, name.toTypeName).setInfo(completer).setFlag(sflags)
       val innerModule = getOwner(jflags).newModule(NoPosition, name).setInfo(completer).setFlag(sflags)
-      innerClass.moduleClass.setInfo(global.loaders.moduleClassLoader)
+      innerModule.moduleClass.setInfo(global.loaders.moduleClassLoader)
 
       getScope(jflags).enter(innerClass)
       getScope(jflags).enter(innerModule)
@@ -921,10 +924,11 @@ abstract class ClassfileParser {
     for (entry <- innerClasses.valuesIterator) {
       // create a new class member for immediate inner classes
       if (entry.outerName == externalName) {
-        val file = global.classPath.lookupPath(
-          entry.externalName.replace('.', java.io.File.separatorChar).toString, false)
-        assert(file ne null, entry.externalName)
-        enterClassAndModule(entry, new global.loaders.ClassfileLoader(file, null, null), entry.jflags)
+        val file = global.classPath.findClass(entry.externalName.toString) match {
+          case Some(ClassRep(Some(binary: AbstractFile), _)) => binary
+          case _ => throw new AssertionError(entry.externalName)
+        }
+        enterClassAndModule(entry, new global.loaders.ClassfileLoader(file), entry.jflags)
       }
     }
   }
@@ -1020,7 +1024,13 @@ abstract class ClassfileParser {
               if (entry.outerName.endsWith("$")) entry.outerName.subName(0, entry.outerName.length - 1)
               else entry.outerName
             val sym = classSymbol(outerName)
-            val s = atPhase(currentRun.typerPhase)(getMember(sym, innerName.toTypeName))
+            val s = 
+              // if loading during initialization of `definitions' typerPhase is not yet set.
+              // in that case we simply load the mmeber at the current phase
+              if (currentRun.typerPhase != null)
+                atPhase(currentRun.typerPhase)(getMember(sym, innerName.toTypeName))
+              else 
+                getMember(sym, innerName.toTypeName)
             assert(s ne NoSymbol, sym + "." + innerName + " linkedModule: " + sym.linkedModuleOfClass + sym.linkedModuleOfClass.info.members)
             s
 
@@ -1100,7 +1110,10 @@ abstract class ClassfileParser {
 
   private def setPrivateWithin(sym: Symbol, jflags: Int) {
     if ((jflags & (JAVA_ACC_PRIVATE | JAVA_ACC_PROTECTED | JAVA_ACC_PUBLIC)) == 0)
-      sym.privateWithin = sym.toplevelClass.owner
+      // See ticket #1687 for an example of when topLevelClass is NoSymbol: it
+      // apparently occurs when processing v45.3 bytecode.
+      if (sym.toplevelClass != NoSymbol)
+        sym.privateWithin = sym.toplevelClass.owner
   }
   
   @inline final private def isPrivate(flags: Int) =

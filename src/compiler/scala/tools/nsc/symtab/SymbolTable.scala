@@ -1,12 +1,12 @@
 /* NSC -- new scala compiler
- * Copyright 2005-2009 LAMP/EPFL
+ * Copyright 2005-2010 LAMP/EPFL
  * @author  Martin Odersky
  */
 // $Id$
 
 package scala.tools.nsc
 package symtab
-import ast.Trees
+import ast.{Trees, DocComments}
 
 import util._
 
@@ -23,6 +23,7 @@ abstract class SymbolTable extends Names
                               with AnnotationCheckers
                               with Trees
                               with Positions
+                              with DocComments
 {
   def settings: Settings
   def rootLoader: LazyType
@@ -42,12 +43,6 @@ abstract class SymbolTable extends Names
   }
   def notifyImport(what : Name, container : Type, from : Name, to : Name) : Unit = {}
   def sanitize(tree : Tree) : Tree = tree
-  def attachSource(symbol : ClassSymbol, file : io.AbstractFile) : Unit = {
-    assert(symbol != null)
-  }
-  def prepareReset(symbol : Symbol, tpe : LazyType) : Unit = {
-    assert(symbol != null)
-  }
 
   /** A period is an ordinal number for a phase in a run.
    *  Phases in later runs have higher periods than phases in earlier runs.

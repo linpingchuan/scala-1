@@ -25,7 +25,7 @@ object Test extends Application {
     val secondFive = empty ++ (6 to 10)
     assert(firstFive ++ secondFive == ten, firstFive ++ secondFive)
     val odds = ten filter (_ % 2 != 0)
-    val evens = ten remove (_ % 2 != 0)
+    val evens = ten filterNot (_ % 2 != 0)
     assert(odds.size == evens.size)
     val (o, e) = ten.partition(_ % 2 == 0)
     assert(o.size == e.size)
@@ -55,10 +55,10 @@ object Test extends Application {
     secondFive copyToBuffer buf
     assert(buf.result == ten, buf.result)
     assert(ten.toArray.size == 10)
-    assert(ten.toArray.toSequence == ten, ten.toArray.toSequence)
+    assert(ten.toArray.toSeq == ten, ten.toArray.toSeq)
     assert(ten.toIterable == ten)
     assert(ten.toList == ten)
-    assert(ten.toSequence == ten)
+    assert(ten.toSeq == ten)
     assert(ten.toStream == ten)
     assert(ten.toString endsWith "(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)")
     assert(ten.mkString("[", "; ", "]") endsWith "[1; 2; 3; 4; 5; 6; 7; 8; 9; 10]")
@@ -73,7 +73,7 @@ object Test extends Application {
     assert(six sameElements (1 to 6))
   }
 
-  def sequenceTest(empty: Sequence[Int]) {
+  def sequenceTest(empty: Seq[Int]) {
     orderedIterableTest(empty)
     val ten = empty ++ (1 to 10)
     println(ten)
@@ -112,21 +112,23 @@ object Test extends Application {
     assert(ten.startsWith(List(3, 4), 2))
     assert(ten.endsWith(List(9, 10)))
     assert(ten.endsWith(List()))
-    assert(ten.indexOfSeq(List(3, 4, 5)) == 2, ten.indexOfSeq(List(3, 4, 5)))
+    assert(ten.indexOfSlice(List(3, 4, 5)) == 2, ten.indexOfSlice(List(3, 4, 5)))
     assert(ten contains 1)
     assert(ten contains 10)
     assert(!(ten contains 0))
     assert((empty ++ (1 to 7) union empty ++ (3 to 10)) == List(1, 2, 3, 4, 5, 6, 7, 3, 4, 5, 6, 7, 8, 9, 10))
     assert((ten diff ten).isEmpty)
     assert((ten diff List()) == ten)
-    assert((ten diff (ten filter (_ % 2 == 0))) == (ten remove  (_ % 2 == 0)))
+    assert((ten diff (ten filter (_ % 2 == 0))) == (ten filterNot  (_ % 2 == 0)))
     assert((ten intersect ten) == ten)
     assert((ten intersect List(5)) == List(5))
     assert((ten ++ ten).removeDuplicates == ten)
     assert(ten.patch(3, List(4, 5, 6, 7), 4) == ten)
     assert(ten.patch(0, List(1, 2, 3), 9) == List(1, 2, 3, 10))
-    assert(empty.padTo(10, 7) == Array.fill(10)(7).toSequence)
+    assert(empty.padTo(10, 7) == Array.fill(10)(7).toSeq)
     assert((ten zip ten.indices) == ten.zipWithIndex)
+    assert(ten.sortWith(_ < _) == ten)
+    assert(ten.sortWith(_ > _) == ten.reverse)
   }
 
   def setTest(empty: => Set[String]) {
@@ -184,7 +186,7 @@ object Test extends Application {
     def m3 = empty ++ m1
     assert(m1 == m3)
     println(m3)
-    val m4 = m3.remove { case (k, v) => k != "A" }
+    val m4 = m3 filterNot { case (k, v) => k != "A" }
     assert(m4.size == 1, m4)
   }
 
@@ -207,13 +209,15 @@ object Test extends Application {
   orderedIterableTest(Iterable())
   orderedIterableTest(mutable.Iterable())
   orderedIterableTest(immutable.Iterable())
-  sequenceTest(Sequence())
-  sequenceTest(mutable.Sequence())
-  sequenceTest(immutable.Sequence())
-  sequenceTest(LinearSequence())
-//  sequenceTest(mutable.LinearSequence())
-  sequenceTest(immutable.LinearSequence())
-  sequenceTest(mutable.Vector())
+  sequenceTest(Seq())
+  sequenceTest(mutable.Seq())
+  sequenceTest(immutable.Seq())
+  sequenceTest(LinearSeq())
+  sequenceTest(IndexedSeq())
+  sequenceTest(Vector())
+//  sequenceTest(mutable.LinearSeq())
+  sequenceTest(immutable.LinearSeq())
+  sequenceTest(mutable.IndexedSeq())
   rangeTest(1 to 10)
 
   setTest(Set())

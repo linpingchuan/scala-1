@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -176,7 +176,7 @@ self =>
    *              contain the same elements.
    */
   override def equals(that: Any): Boolean = that match {
-    case that: Set[A] =>
+    case that: Set[_] =>
       (this eq that) ||
       (that canEqual this) &&
       (this.size == that.size) &&

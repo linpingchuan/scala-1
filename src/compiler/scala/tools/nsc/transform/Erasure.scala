@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2009 LAMP/EPFL
+ * Copyright 2005-2010 LAMP/EPFL
  * @author Martin Odersky
  */
 // $Id$
@@ -75,6 +75,13 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
     case _ => 0
   }
 
+  // @M #2585 when generating a java generic signature that includes a selection of an inner class p.I,  (p = `pre`, I = `cls`)
+  // must rewrite to p'.I, where p' refers to the class that directly defines the nested class I
+  // see also #2585 marker in javaSig: there, type arguments must be included (use pre.baseType(cls.owner))
+  // requires cls.isClass
+  @inline private def rebindInnerClass(pre: Type, cls: Symbol): Type =
+    if(cls.owner.isClass) cls.owner.tpe else pre // why not cls.isNestedClass?
+
   /** <p>
    *    The erasure <code>|T|</code> of a type <code>T</code>. This is:
    *  </p>
@@ -90,7 +97,7 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
    *   - For a typeref scala.Array+[T] where T is not an abstract type, scala.Array+[|T|].
    *   - For a typeref scala.Any or scala.AnyVal, java.lang.Object.
    *   - For a typeref scala.Unit, scala.runtime.BoxedUnit.
-   *   - For a typeref P.C[Ts] where C refers to a class, |P|.C.
+   *   - For a typeref P.C[Ts] where C refers to a class, |P|.C. (Where P is first rebound to the class that directly defines C.)
    *   - For a typeref P.C[Ts] where C refers to an alias type, the erasure of C's alias.
    *   - For a typeref P.C[Ts] where C refers to an abstract type, the
    *     erasure of C's upper bound.
@@ -122,9 +129,8 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
             else typeRef(apply(pre), sym, args map this)
           else if (sym == AnyClass || sym == AnyValClass || sym == SingletonClass) erasedTypeRef(ObjectClass)
           else if (sym == UnitClass) erasedTypeRef(BoxedUnitClass)
-          else if (sym.isClass) 
-            typeRef(apply(if (sym.owner.isClass) sym.owner.tpe else pre), sym, List())
-          else apply(sym.info)
+          else if (sym.isClass) typeRef(apply(rebindInnerClass(pre, sym)), sym, List())  // #2585
+          else apply(sym.info) // alias type or abstract type
         case PolyType(tparams, restpe) =>
           apply(restpe)
         case ExistentialType(tparams, restpe) =>
@@ -164,6 +170,7 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
           case TypeRef(pre, sym, args) =>
             if (sym == ArrayClass) args foreach traverse
             else if (sym.isTypeParameterOrSkolem || sym.isExistential || !args.isEmpty) result = true
+            else if (sym.isClass) traverse(rebindInnerClass(pre, sym)) // #2585
             else if (!sym.owner.isPackageClass) traverse(pre)
           case PolyType(_, _) | ExistentialType(_, _) =>
             result = true
@@ -242,9 +249,10 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
           else if (isValueClass(sym)) 
             tagOfClass(sym).toString
           else if (sym.isClass)
-            { 
-              if (needsJavaSig(pre)) {
-                val s = jsig(pre) 
+            {
+              val preRebound = pre.baseType(sym.owner) // #2585
+              if (needsJavaSig(preRebound)) {
+                val s = jsig(preRebound)
                 if (s.charAt(0) == 'L') s.substring(0, s.length - 1) + classSigSuffix
                 else classSig
               } else classSig
@@ -277,6 +285,9 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
           (parents map jsig).mkString
         case AnnotatedType(_, atp, _) =>
           jsig(atp)
+        case BoundedWildcardType(bounds) =>
+          println("something's wrong: "+sym+":"+sym.tpe+" has a bounded wildcard type")
+          jsig(bounds.hi)
         case _ =>
           val etp = erasure(tp)
           if (etp eq tp) throw new UnknownSig
@@ -384,9 +395,6 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
    }
   }
 
-  private def isSeqClass(sym: Symbol) =
-    (SeqClass isNonBottomSubClass sym) && (sym != ObjectClass)
-
   /** The symbol which is called by a bridge;
    *  @pre phase > erasure
    */
@@ -418,17 +426,6 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
             assert(x != ArrayClass)
             (REF(boxMethod(x)) APPLY tree) setPos (tree.pos) setType ObjectClass.tpe
         })
-    }
-
-    /** generate  ScalaRuntime.boxArray(tree)
-     *  !!! todo: optimize this in case the runtime type is known
-     */
-    private def boxArray(tree: Tree): Tree = tree match {
-      case LabelDef(name, params, rhs) =>
-        val rhs1 = boxArray(rhs)
-        treeCopy.LabelDef(tree, name, params, rhs1) setType rhs1.tpe
-      case _ =>
-        typedPos(tree.pos) { gen.mkRuntimeCall(nme.boxArray, List(tree)) }
     }
 
     /** Unbox <code>tree</code> of boxed type to expected type <code>pt</code>.
@@ -609,7 +606,7 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
      *  @param pt   ...
      *  @return     the adapted tree
      */
-    override protected def adapt(tree: Tree, mode: Int, pt: Type): Tree =
+    override protected def adapt(tree: Tree, mode: Int, pt: Type, original: Tree = EmptyTree): Tree =
       adaptToType(tree, pt)
 
     /** A replacement for the standard typer's `typed1' method */
@@ -777,7 +774,7 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
       //println("computing bridges for " + owner)//DEBUG
       assert(phase == currentRun.erasurePhase)
       val site = owner.thisType
-      val bridgesScope = newScope
+      val bridgesScope = new Scope
       val bridgeTarget = new HashMap[Symbol, Symbol]
       var bridges: List[Tree] = List()
       val opc = atPhase(currentRun.explicitOuterPhase) {     
@@ -901,19 +898,21 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
             treeCopy.DefDef(tree, mods, name, List(), vparamss, tpt, rhs)
           case TypeDef(_, _, _, _) =>
             EmptyTree
-          case TypeApply(fun, args @ List(arg)) // !!! todo: simplify by having GenericArray also extract trees
+          case Apply(instanceOf @ TypeApply(fun @ Select(qual, name), args @ List(arg)), List()) // !!! todo: simplify by having GenericArray also extract trees
           if ((fun.symbol == Any_isInstanceOf || fun.symbol == Object_isInstanceOf) &&
               unboundedGenericArrayLevel(arg.tpe) > 0) =>
             val level = unboundedGenericArrayLevel(arg.tpe)
             def isArrayTest(arg: Tree) = 
               gen.mkRuntimeCall("isArray", List(arg, Literal(Constant(level))))
             typedPos(tree.pos) {
-              if (level == 1) isArrayTest(fun)
-              else 
-                gen.evalOnce(fun, currentOwner, unit) { fun1 =>
+              if (level == 1) isArrayTest(qual)
+              else
+                gen.evalOnce(qual, currentOwner, unit) { qual1 =>
                   gen.mkAnd(
-                    treeCopy.TypeApply(tree, fun1(), args),
-                    isArrayTest(fun1()))
+                    Apply(TypeApply(Select(qual1(), fun.symbol), 
+                                    List(TypeTree(erasure(arg.tpe)))), 
+                          List()),
+                    isArrayTest(qual1()))
                 }
             }
           case TypeApply(fun, args) if (fun.symbol.owner != AnyClass && 

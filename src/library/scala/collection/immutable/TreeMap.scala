@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -21,7 +21,7 @@ import mutable.Builder
  */
 object TreeMap extends ImmutableSortedMapFactory[TreeMap] {
   def empty[A, B](implicit ord: Ordering[A]) = new TreeMap[A, B]()(ord)
-  implicit def builderFactory[A, B](implicit ord: Ordering[A]): BuilderFactory[(A, B), TreeMap[A, B], Coll] = new SortedMapBuilderFactory[A, B]
+  implicit def canBuildFrom[A, B](implicit ord: Ordering[A]): CanBuildFrom[Coll, (A, B), TreeMap[A, B]] = new SortedMapCanBuildFrom[A, B]
   private def make[A, B](s: Int, t: RedBlack[A]#Tree[B])(implicit ord: Ordering[A]) = new TreeMap[A, B](s, t)(ord)
 }
 

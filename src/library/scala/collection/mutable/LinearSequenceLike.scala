@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -13,7 +13,7 @@ package scala.collection.mutable
 import scala.{ collection => col }
 import annotation.tailrec
 
-trait LinearSequenceLike[A, This >: Null <: LinearSequenceLike[A, This]] extends col.LinearSequenceLike[A, This] { self: This =>
+trait LinearSeqLike[A, This >: Null <: LinearSeqLike[A, This]] extends col.LinearSeqLike[A, This] { self: This =>
   protected var _elem: A = _
   @deprecated("use head instead")
   def elem = _elem

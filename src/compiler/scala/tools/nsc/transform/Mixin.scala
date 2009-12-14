@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2009 LAMP/EPFL
+ * Copyright 2005-2010 LAMP/EPFL
  * @author Martin Odersky
  */
 // $Id$
@@ -9,9 +9,8 @@ package transform
 
 import symtab._
 import Flags._
-import scala.collection.mutable.ListBuffer
 import scala.tools.nsc.util.{Position,NoPosition}
-import scala.collection.mutable.HashMap
+import collection.mutable.{ListBuffer, HashMap}
 
 abstract class Mixin extends InfoTransform with ast.TreeDSL {
   import global._
@@ -99,14 +98,14 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
       var sym: Symbol = NoSymbol
       if (settings.debug.value)
         log("starting rebindsuper " + base + " " + member + ":" + member.tpe +
-            " " + mixinClass + " " + base.info.baseClasses)
+            " " + mixinClass + " " + base.info.baseClasses + "/" + bcs)
       while (!bcs.isEmpty && sym == NoSymbol) {
         if (settings.debug.value) {
           val other = bcs.head.info.nonPrivateDecl(member.name);
           log("rebindsuper " + bcs.head + " " + other + " " + other.tpe +
               " " + other.isDeferred)
         }
-        sym = member.overridingSymbol(bcs.head).suchThat(sym => !sym.hasFlag(DEFERRED | BRIDGE))
+        sym = member.matchingSymbol(bcs.head, base.thisType).suchThat(sym => !sym.hasFlag(DEFERRED | BRIDGE))
         bcs = bcs.tail
       }
       assert(sym != NoSymbol, member)
@@ -238,7 +237,7 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
             val imember = member.overriddenSymbol(iface)
             //Console.println("mixin member "+member+":"+member.tpe+member.locationString+" "+imember+" "+imember.overridingSymbol(clazz)+" to "+clazz+" with scope "+clazz.info.decls)//DEBUG
             if (imember.overridingSymbol(clazz) == NoSymbol &&
-                clazz.info.findMember(member.name, 0, lateDEFERRED, false)(NoSymbol).alternatives.contains(imember)) {
+                clazz.info.findMember(member.name, 0, lateDEFERRED, false).alternatives.contains(imember)) {
                   val member1 = addMember(
                     clazz,
                     member.cloneSymbol(clazz) setPos clazz.pos resetFlag (DEFERRED | lateDEFERRED))
@@ -279,13 +278,16 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
                     // member is a value of type unit. No field needed
                     ;
                   case _ =>
+                    // atPhase: the private field is moved to the implementation class by erasure,
+                    // so it can no longer be found in the member's owner (the trait)
+                    val accessed = atPhase(currentRun.picklerPhase)(member.accessed)
                     // otherwise mixin a field as well
                     addMember(clazz,
                               clazz.newValue(member.pos, nme.getterToLocal(member.name))
                               setFlag (LOCAL | PRIVATE | member.getFlag(MUTABLE | LAZY))
                               setFlag (if (!member.hasFlag(STABLE)) MUTABLE else 0)
                               setInfo member.tpe.resultType
-                              setAnnotations member.annotations)
+                              setAnnotations accessed.annotations)
                 }
             }
           } else if (member hasFlag SUPERACCESSOR) { // mixin super accessors
@@ -343,12 +345,12 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
           sourceModule setInfo sym.tpe
           assert(clazz.sourceModule != NoSymbol)//debug
           parents1 = List()
-          decls1 = newScope(decls.toList filter isImplementedStatically)
+          decls1 = new Scope(decls.toList filter isImplementedStatically)
         } else if (!parents.isEmpty) {
           parents1 = parents.head :: (parents.tail map toInterface)
         }
       }
-      //decls1 = atPhase(phase.next)(newScope(decls1.toList))//debug
+      //decls1 = atPhase(phase.next)(new Scope(decls1.toList))//debug
       if ((parents1 eq parents) && (decls1 eq decls)) tp
       else ClassInfoType(parents1, decls1, clazz)
 
@@ -362,6 +364,50 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
 
     case _ =>
       tp
+  }
+
+  import scala.collection._
+
+  /** Return a map of single-use fields to the lazy value that uses them during initialization.
+   *  Each field has to be private and defined in the enclosing class, and there must
+   *  be exactly one lazy value using it.
+   *
+   *  Such fields will be nulled after the initializer has memoized the lazy value.
+   */
+  def singleUseFields(templ: Template): collection.Map[Symbol, List[Symbol]] = {
+    val usedIn = new mutable.HashMap[Symbol, List[Symbol]] {
+      override def default(key: Symbol) = Nil
+    }
+
+    object SingleUseTraverser extends Traverser {
+      override def traverse(tree: Tree) {
+        tree match {
+          case Assign(lhs, rhs) => traverse(rhs) // assignments don't count
+          case _ =>
+            if (tree.hasSymbol && tree.symbol != NoSymbol) {
+              val sym = tree.symbol
+              if ((sym.hasFlag(ACCESSOR) || (sym.isTerm && !sym.isMethod))
+                  && sym.hasFlag(PRIVATE)
+                  && !(currentOwner.isGetter && currentOwner.accessed == sym) // getter
+                  && !definitions.isValueClass(sym.tpe.resultType.typeSymbol)
+                  && sym.owner == templ.symbol.owner
+                  && !tree.isDef) {
+                log("added use in: " + currentOwner + " -- " + tree)
+                usedIn(sym) ::= currentOwner
+
+              }
+            }
+            super.traverse(tree)          
+        }
+      }
+    }
+    SingleUseTraverser(templ)
+    log("usedIn: " + usedIn)
+    usedIn filter { pair =>
+      val member = pair._2.head
+      (member.isValue
+         && member.hasFlag(LAZY)
+         && pair._2.tail.isEmpty) }
   }
 
 // --------- term transformation -----------------------------------------------
@@ -378,11 +424,14 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
 
     /** The rootContext used for typing */
     private val rootContext =
-      erasure.NoContext.make(EmptyTree, RootClass, newScope)
+      erasure.NoContext.make(EmptyTree, RootClass, new Scope)
 
     /** The typer */
     private var localTyper: erasure.Typer = _
     private def typedPos(pos: Position)(tree: Tree) = localTyper typed { atPos(pos)(tree) }
+
+    /** Map lazy values to the fields they should null after initialization. */
+    private var lazyValNullables: mutable.MultiMap[Symbol, Symbol] = _
 
     import scala.collection._
     
@@ -600,9 +649,9 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
        *  The result will be a tree of the form
        *  {
        *    if ((bitmap$n & MASK) == 0) {
-       *       synhronized(this) {
+       *       synchronized(this) {
        *         if ((bitmap$n & MASK) == 0) {
-       *           synhronized(this) {
+       *           synchronized(this) {
        *             init // l$ = <rhs>
        *           }
        *           bitmap$n = bimap$n | MASK
@@ -612,21 +661,31 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
        *  where bitmap$n is an int value acting as a bitmap of initialized values. It is
        *  the 'n' is (offset / 32), the MASK is (1 << (offset % 32)).
        */
-      def mkLazyDef(clazz: Symbol, init: List[Tree], retVal: Tree, offset: Int): Tree = {
+      def mkLazyDef(clazz: Symbol, lzyVal: Symbol, init: List[Tree], retVal: Tree, offset: Int): Tree = {
+        def nullify(sym: Symbol): Tree = {
+          val sym1 = if (sym.hasFlag(ACCESSOR)) sym.accessed else sym
+          Select(This(clazz), sym1) === LIT(null)
+        }
+
+
         val bitmapSym = bitmapFor(clazz, offset)
         val mask      = LIT(1 << (offset % FLAGS_PER_WORD))
         def cond      = mkTest(clazz, mask, bitmapSym, true)
+        val nulls     = (lazyValNullables(lzyVal).toList sortBy (_.id) map nullify)
         def syncBody  = init ::: List(mkSetFlag(clazz, offset), UNIT)
-        
+
+        log("nulling fields inside " + lzyVal + ": " + nulls)
         val result    = 
-          IF (cond) THEN gen.mkSynchronized(
-            gen mkAttributedThis clazz,
-            IF (cond) THEN BLOCK(syncBody: _*) ENDIF
-          ) ENDIF
+          IF (cond) THEN BLOCK(
+            (gen.mkSynchronized(
+              gen mkAttributedThis clazz,
+              IF (cond) THEN BLOCK(syncBody: _*) ENDIF
+            )
+            :: nulls): _*) ENDIF
 
         typedPos(init.head.pos)(BLOCK(result, retVal))
       }
-      
+
       def mkCheckedAccessor(clazz: Symbol, retVal: Tree, offset: Int, pos: Position): Tree = {
         val bitmapSym = bitmapFor(clazz, offset)
         val mask      = LIT(1 << (offset % FLAGS_PER_WORD))
@@ -653,10 +712,10 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
             if sym.hasFlag(LAZY) && rhs != EmptyTree && !clazz.isImplClass =>
               assert(fieldOffset.isDefinedAt(sym))
               val rhs1 = if (sym.tpe.resultType.typeSymbol == UnitClass) 
-                mkLazyDef(clazz, List(rhs), UNIT, fieldOffset(sym))
+                mkLazyDef(clazz, sym, List(rhs), UNIT, fieldOffset(sym))
               else {
                 val Block(stats, res) = rhs
-                mkLazyDef(clazz, stats, Select(This(clazz), res.symbol), fieldOffset(sym))
+                mkLazyDef(clazz, sym, stats, Select(This(clazz), res.symbol), fieldOffset(sym))
               }
               treeCopy.DefDef(stat, mods, name, tp, vp, tpt, rhs1)
               
@@ -790,13 +849,13 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
                     if (sym.hasFlag(LAZY) && sym.isGetter) {
                       val rhs1 = 
                         if (sym.tpe.resultType.typeSymbol == UnitClass)
-                          mkLazyDef(clazz, List(Apply(staticRef(initializer(sym)), List(gen.mkAttributedThis(clazz)))), UNIT, fieldOffset(sym))
+                          mkLazyDef(clazz, sym, List(Apply(staticRef(initializer(sym)), List(gen.mkAttributedThis(clazz)))), UNIT, fieldOffset(sym))
                         else {
                           val assign = atPos(sym.pos) {
                             Assign(Select(This(sym.accessed.owner), sym.accessed) /*gen.mkAttributedRef(sym.accessed)*/ ,
                                 Apply(staticRef(initializer(sym)), gen.mkAttributedThis(clazz) :: Nil))
                           }
-                          mkLazyDef(clazz, List(assign), Select(This(clazz), sym.accessed), fieldOffset(sym))
+                          mkLazyDef(clazz, sym, List(assign), Select(This(clazz), sym.accessed), fieldOffset(sym))
                         }
                       rhs1
                     } else if (sym.getter(sym.owner).tpe.resultType.typeSymbol == UnitClass) {
@@ -855,6 +914,22 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
       stats1
     }
 
+    private def nullableFields(templ: Template) = {
+      val nullables = new mutable.HashMap[Symbol, mutable.Set[Symbol]] with mutable.MultiMap[Symbol, Symbol] {
+        override def default(key: Symbol) = mutable.Set.empty
+      }
+
+      // if there are no lazy fields, take the fast path and save a traversal of the whole AST
+      if (templ.symbol.owner.info.decls.exists(_.hasFlag(LAZY))) {
+        // check what fields can be nulled for
+        val uses = singleUseFields(templ)
+        for ((field, users) <- uses; lazyFld <- users) {
+          nullables.addBinding(lazyFld, field)
+        }
+      }
+      nullables
+    }
+
     /** The transform that gets applied to a tree after it has been completely
      *  traversed and possible modified by a preTransform.
      *  This step will
@@ -884,6 +959,7 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
           // change parents of templates to conform to parents in the symbol info
           val parents1 = currentOwner.info.parents map (t => TypeTree(t) setPos tree.pos)
 
+          lazyValNullables = nullableFields(tree.asInstanceOf[Template])
           // add all new definitions to current class or interface
           val body1 = addNewDefs(currentOwner, body)
 

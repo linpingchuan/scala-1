@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -14,18 +14,18 @@ package mutable
 
 import generic._
 
-/** This class is used internally to implement data structures that
- *  are based on resizable arrays.
+/** A class for polymorphic arrays of elements that's represented
+ *  internally by an array of objects. This means that elements of
+ *  primitive types are boxed.
  *
- *  @author  Matthias Zenger, Burak Emir
  *  @author Martin Odersky
  *  @version 2.8
  *  @since   2.8
  */
 class GenericArray[A](override val length: Int)
-extends Vector[A] 
+extends IndexedSeq[A] 
    with GenericTraversableTemplate[A, GenericArray]
-   with VectorLike[A, GenericArray[A]] { 
+   with IndexedSeqLike[A, GenericArray[A]] { 
 
   override def companion: GenericCompanion[GenericArray] = GenericArray
 
@@ -41,23 +41,6 @@ extends Vector[A]
     array(idx) = elem.asInstanceOf[AnyRef]
   }
 
-  /** Fills the given array <code>xs</code> with the elements of
-   *  this sequence starting at position <code>start</code>.
-   *
-   *  @param  xs the array to fill.
-   *  @param  start starting index.
-   */
-  override def copyToArray[B >: A](xs: Array[B], start: Int) {
-    Array.copy(array, 0, xs, start, length)
-  }
-
-  /** Copy all elements to a buffer 
-   *  @param   The buffer to which elements are copied
-  override def copyToBuffer[B >: A](dest: Buffer[B]) {
-    dest ++= (array: Sequence[AnyRef]).asInstanceOf[Sequence[B]]
-  }
-   */
-
   override def foreach[U](f: A =>  U) {
     var i = 0
     while (i < length) {
@@ -65,10 +48,24 @@ extends Vector[A]
       i += 1
     }
   }
+
+  /** Fills the given array <code>xs</code> with at most `len` elements of
+   *  this traversable starting at position `start`.
+   *  Copying will stop once either the end of the current traversable is reached or
+   *  `len` elements have been copied or the end of the array is reached.
+   *
+   *  @param  xs the array to fill.
+   *  @param  start starting index.
+   *  @param  len number of elements to copy
+   */
+   override def copyToArray[B >: A](xs: Array[B], start: Int, len: Int) {
+     val len1 = len min (xs.length - start) min length
+     Array.copy(array, 0, xs, start, len1)
+   }
 }
 
-object GenericArray extends SequenceFactory[GenericArray] {
-  implicit def builderFactory[A]: BuilderFactory[A, GenericArray[A], Coll] = new VirtualBuilderFactory[A]
+object GenericArray extends SeqFactory[GenericArray] {
+  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, GenericArray[A]] = new GenericCanBuildFrom[A]
   def newBuilder[A]: Builder[A, GenericArray[A]] = 
     new ArrayBuffer[A] mapResult { buf => 
       val result = new GenericArray[A](buf.length)

@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2009 LAMP/EPFL
+ * Copyright 2005-2010 LAMP/EPFL
  * @author  Martin Odersky
  */
 // $Id$
@@ -10,9 +10,9 @@ import java.io.{File, FileOutputStream, PrintWriter}
 import java.io.{IOException, FileNotFoundException}
 import java.nio.charset._
 import compat.Platform.currentTime
-import scala.tools.nsc.io.{SourceReader, AbstractFile}
+import scala.tools.nsc.io.{SourceReader, AbstractFile, Path}
 import scala.tools.nsc.reporters._
-import scala.tools.nsc.util.{ClassPath, SourceFile, BatchSourceFile, OffsetPosition, RangePosition}
+import scala.tools.nsc.util.{ClassPath, MsilClassPath, JavaClassPath, SourceFile, BatchSourceFile, OffsetPosition, RangePosition}
 
 import scala.collection.mutable.{HashSet, HashMap, ListBuffer}
 
@@ -63,7 +63,7 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     val global: Global.this.type = Global.this
   } with TreeGen {
     def mkAttributedCast(tree: Tree, pt: Type): Tree =
-      typer.typed(mkAttributedCastUntyped(tree, pt))
+      typer.typed(mkCast(tree, pt))
   }
 
   /** Fold constants */
@@ -114,23 +114,6 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
   } with TreeBrowsers
 
   val treeBrowser = treeBrowsers.create()
-
-
-//  val copy = new LazyTreeCopier()
-
-  /** A map of all doc comments, indexed by symbols.
-   *  Only active in onlyPresentation mode
-   */
-  val comments =
-    if (onlyPresentation) new HashMap[Symbol,String]
-    else null
-
-  /** A map of argument names for methods
-   *  !!! can be dropped once named method arguments are in !!!
-   */
-  val methodArgumentNames =
-    if (onlyPresentation) new HashMap[Symbol,List[List[Symbol]]]
-    else null
 
   // ------------ Hooks for interactive mode-------------------------
 
@@ -219,50 +202,26 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     settings.dependenciesFile.value match {
       case "none" => ()
       case x => 
-        val jfile = new java.io.File(x)
-        if (!jfile.exists) jfile.createNewFile
-        else {
-          // This logic moved here from scala.tools.nsc.dependencies.File.
-          // Note that it will trip an assertion in lookupPathUnchecked
-          // if the path being looked at is absolute.
-          
-          /** The directory where file lookup should start at. */
-          val rootDirectory: AbstractFile = {
-            AbstractFile.getDirectory(".")
-//             val roots = java.io.File.listRoots()
-//             assert(roots.length > 0)
-//             new PlainFile(roots(0))
-          }
-
-          def toFile(path: String) = {
-            val file = rootDirectory.lookupPathUnchecked(path, false)
-            assert(file ne null, path)
-            file
-          }
-        
-          dependencyAnalysis.loadFrom(AbstractFile.getFile(jfile), toFile)
+        val depFilePath = Path(x)
+        if (depFilePath.exists) {
+          /** The directory where file lookup should start */
+          val rootPath = depFilePath.parent
+          def toFile(path: String) = AbstractFile.getFile(rootPath resolve Path(path))
+          dependencyAnalysis.loadFrom(AbstractFile.getFile(depFilePath), toFile)
         }
     }
 
-  lazy val classPath0 = new ClassPath(false && onlyPresentation)
-
-  lazy val classPath =
+  lazy val classPath = {
+    ClassPath.XO = settings.XO.value
     if (forMSIL)
-      new classPath0.Build(settings.sourcepath.value, settings.outdir.value)
+      new MsilClassPath(settings.assemextdirs.value, settings.assemrefs.value,
+                       settings.sourcepath.value)
     else
-      new classPath0.Build(settings.classpath.value, settings.sourcepath.value,
-                           settings.outdir.value, settings.bootclasspath.value,
-                           settings.extdirs.value, settings.Xcodebase.value)
-  /* .NET's equivalent of a classpath */
-  lazy val assemrefs = {
-    import java.util.{StringTokenizer}
-    val set = new HashSet[File]  
-    val assems = new StringTokenizer(settings.assemrefs.value, File.pathSeparator)
-    while (assems.hasMoreTokens()) 
-      set += new java.io.File(assems.nextToken())
-    set  
+      new JavaClassPath(settings.bootclasspath.value, settings.extdirs.value,
+                        settings.classpath.value, settings.sourcepath.value,
+                        settings.Xcodebase.value)
   }
-                           
+
   if (settings.verbose.value) {
     inform("[Classpath = " + classPath + "]")
     if (forMSIL) inform("[AssemRefs = " + settings.assemrefs.value + "]")
@@ -278,20 +237,13 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     getSourceFile(f)
   }
 
-  def getSourceFile(clazz: Symbol): SourceFile = {
-    val ret = classPath.root.find(clazz.fullNameString(File.separatorChar), false)
-    if (!ret.isSourceFile) throw new FileNotFoundException(
-      "source file for " + clazz + " could not be found")
-    getSourceFile(ret.sourceFile)
-  }
-  
-  lazy val loaders : SymbolLoaders { val global : Global.this.type } = new {
+  lazy val loaders = new SymbolLoaders {
     val global: Global.this.type = Global.this
-  } with SymbolLoaders
+  }
 
   def rootLoader: LazyType =
-    if (forMSIL) new loaders.NamespaceLoader(classPath.root)
-    else new loaders.PackageLoader(classPath.root /* getRoot() */)
+    if (forMSIL) new loaders.NamespaceLoader(classPath.asInstanceOf[MsilClassPath])
+    else new loaders.JavaPackageLoader(classPath.asInstanceOf[JavaClassPath])
 
 // ------------ Phases -------------------------------------------}
 
@@ -325,8 +277,8 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
       val unit0 = currentRun.currentUnit
       try {
         currentRun.currentUnit = unit
-        reporter.setSource(unit.source)
-        if (!cancelled(unit)) apply(unit)
+        if (!cancelled(unit))
+          reporter.withSource(unit.source) { apply(unit) }
         currentRun.advanceUnit
       } finally {
         //assert(currentRun.currentUnit == unit)
@@ -397,18 +349,14 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     val runsAfter = List[String]("uncurry")
     val runsRightAfter = None
   } with TailCalls
- 
- //  object checkDefined extends {
- //    val global: Global.this.type = Global.this
- //  } with CheckDefined
- 
+
   // phaseName = "explicitouter"
   object explicitOuter extends {
     val global: Global.this.type = Global.this
     val runsAfter = List[String]("tailcalls")
     val runsRightAfter = None
   } with ExplicitOuter
- 
+                                                             
   // phaseName = "specialize"
   object specializeTypes extends {
     val global: Global.this.type = Global.this
@@ -566,14 +514,15 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
   object icodeChecker extends checkers.ICodeChecker()
 
   object typer extends analyzer.Typer(
-    analyzer.NoContext.make(EmptyTree, Global.this.definitions.RootClass, newScope))
+    analyzer.NoContext.make(EmptyTree, Global.this.definitions.RootClass, new Scope))
 
   /* Add the internal compiler phases to the phases set
    */
   protected def computeInternalPhases() {
     phasesSet += syntaxAnalyzer                        // The parser
     phasesSet += analyzer.namerFactory                 // note: types are there because otherwise
-    phasesSet += analyzer.typerFactory                 // consistency check after refchecks would fail.
+    phasesSet += analyzer.packageObjects               // consistency check after refchecks would fail.
+    phasesSet += analyzer.typerFactory
     phasesSet += superAccessors			       // add super accessors
     phasesSet += pickler			       // serialize symbol tables
     phasesSet += refchecks			       // perform reference and override checking, translate nested objects
@@ -784,7 +733,8 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
 
     /** Compile list of source files */
     def compileSources(_sources: List[SourceFile]) {
-      val sources = dependencyAnalysis.filter(_sources.removeDuplicates) // bug #1268, scalac confused by duplicated filenames
+      val depSources = dependencyAnalysis.filter(_sources.removeDuplicates) // bug #1268, scalac confused by duplicated filenames
+      val sources = scalaObjectFirst(depSources)
       if (reporter.hasErrors)
         return  // there is a problem already, e.g. a
                 // plugin was passed a bad option
@@ -822,6 +772,8 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
         advancePhase
       }
 
+      //println(narrowCount+" narrowings")
+
       if (settings.Xshowcls.value != "")
         showDef(newTermName(settings.Xshowcls.value), false)
       if (settings.Xshowobj.value != "")
@@ -845,15 +797,20 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
       informTime("total", startTime)
 
       if (!dependencyAnalysis.off) {
+        settings.dependenciesFile.value match {
+          case "none" =>
+          case x => 
+            val depFilePath = Path(x)
+            if (!depFilePath.exists)
+              dependencyAnalysis.dependenciesFile = AbstractFile.getFile(depFilePath.createFile())
         
-        def fromFile(file: AbstractFile): String = {
-          val path = file.path
-          if (path.startsWith("./"))
-            path.substring(2, path.length)
-          else path
+            /** The directory where file lookup should start */
+            val rootPath = depFilePath.parent.normalize
+            def fromFile(file: AbstractFile): String =
+              rootPath.relativize(Path(file.file).normalize).path
+          
+            dependencyAnalysis.saveDependencies(fromFile)
         }
-        
-        dependencyAnalysis.saveDependencies(fromFile)
       }
     }
 
@@ -895,8 +852,7 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
                   " was found\n(This file cannot be loaded as a source file)"
         inform(msg)
         throw new FatalError(msg)
-      }
-      else if (!(fileset contains file)) {
+      } else if (!(fileset contains file)) {
         compileLate(new CompilationUnit(getSourceFile(file)))
       }
     }
@@ -909,11 +865,11 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
       var localPhase = firstPhase.asInstanceOf[GlobalPhase]
       while (localPhase != null && (localPhase.id  < globalPhase.id || localPhase.id <= namerPhase.id)/* && !reporter.hasErrors*/) {
         val oldSource = reporter.getSource          
-        reporter.setSource(unit.source)          
-        atPhase(localPhase)(localPhase.applyPhase(unit))
+        reporter.withSource(unit.source) {
+          atPhase(localPhase)(localPhase.applyPhase(unit))
+        }
         val newLocalPhase = localPhase.next.asInstanceOf[GlobalPhase]
         localPhase = if (localPhase == newLocalPhase) null else newLocalPhase
-        reporter.setSource(oldSource)
       }
       refreshProgress
     }
@@ -926,6 +882,17 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
         pclazz.setInfo(atPhase(typerPhase)(pclazz.info))
       }
       if (!pclazz.isRoot) resetPackageClass(pclazz.owner)
+    }
+
+    private def scalaObjectFirst(files: List[SourceFile]) = {
+      def inScalaFolder(f: SourceFile) =
+        f.file.container.name == "scala"
+      val res = new ListBuffer[SourceFile]
+      for (file <- files) file.file.name match {
+        case "ScalaObject.scala" if inScalaFolder(file) => file +=: res
+        case _ => res += file
+      }
+      res.toList
     }
   } // class Run
 
@@ -953,7 +920,7 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     inform("" + sym.name + ":" +(if (module) sym.tpe.typeSymbol.info else sym.info))
   }
 
-  /** Returns the file with the given suffix for the given class. */
+  /** Returns the file with the given suffix for the given class. Used for icode writing. */
   def getFile(clazz: Symbol, suffix: String): File = {
     val outdirname = settings.outputDirs.outputDirFor(clazz.sourceFile)
     var outdir = new File(if (outdirname.path == "") "." else outdirname.path)
@@ -992,8 +959,4 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
   def forJVM : Boolean = settings.target.value startsWith "jvm"
   def forMSIL: Boolean = settings.target.value == "msil"
   def onlyPresentation = false
-  private val unpickleIDEHook0 : (( => Type) => Type) = f => f
-  def unpickleIDEHook : (( => Type) => Type) = unpickleIDEHook0
-
-  def doPickleHash = false
 }

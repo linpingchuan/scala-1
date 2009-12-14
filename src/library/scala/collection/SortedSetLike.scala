@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2006-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2006-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -20,6 +20,8 @@ import generic._
  */
 trait SortedSetLike[A, +This <: SortedSet[A] with SortedSetLike[A, This]] extends Sorted[A, This] with SetLike[A, This] {
 self =>
+
+  implicit def ordering: Ordering[A]
 
   override def keySet = repr
 

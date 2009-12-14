@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2009 LAMP/EPFL
+ * Copyright 2005-2010 LAMP/EPFL
  * @author  Martin Odersky
  */
 // $Id$
@@ -476,7 +476,6 @@ class SemanticTokens(val compiler: Global) {
         build(tree.pat)
         build(tree.guard)
         build(tree.body)
-      case tree : Sequence   => build(tree.trees);
       case tree : Assign     => build(tree.lhs); build(tree.rhs);
       case tree : If         => build(tree.cond); build(tree.thenp); build(tree.elsep);
       case tree : New        => 

@@ -83,8 +83,14 @@ self =>
           pollForWork()
           if (typerRun == currentTyperRun)
             return
-            
-          integrateNew()
+          
+          // @Martin
+          // Guard against NPEs in integrateNew if context.unit == null here.
+          // But why are we doing this at all? If it was non-null previously
+          // integrateNew will already have been called. If it was null previously
+          // it will still be null now?
+          if (context.unit != null)          
+            integrateNew()
           throw new FreshRunReq
         } catch {
           case ex : ValidateError => // Ignore, this will have been reported elsewhere
@@ -199,7 +205,8 @@ self =>
         case ex => 
           outOfDate = false
           compileRunner = newRunnerThread
-          ex match { 
+          ex match {
+            case _ : FreshRunReq =>   // This shouldn't be reported
             case _ : ValidateError => // This will have been reported elsewhere
             case _ => ex.printStackTrace(); inform("Fatal Error: "+ex)
           }
@@ -265,16 +272,17 @@ self =>
   // ----------------- Implementations of client commmands -----------------------
   
   def respond[T](result: Response[T])(op: => T): Unit =
-    while(true)
-      try {
-        result set Left(op)
-        return
-      } catch {
-        case ex : ControlException =>
-        case ex =>
-          result set Right(ex)
-          throw ex
-      }
+    try {
+      result set Left(op)
+      return
+    } catch {
+      case ex : FreshRunReq =>
+        scheduler.postWorkItem(() => respond(result)(op))
+        throw ex
+      case ex =>
+        result set Right(ex)
+        throw ex
+    }
 
   /** Make sure a set of compilation units is loaded and parsed */
   def reloadSources(sources: List[SourceFile]) {
@@ -326,6 +334,16 @@ self =>
   def stabilizedType(tree: Tree): Type = tree match {
     case Ident(_) if tree.symbol.isStable => singleType(NoPrefix, tree.symbol)
     case Select(qual, _) if tree.symbol.isStable => singleType(qual.tpe, tree.symbol)
+    case Import(expr, selectors) =>
+      tree.symbol.info match {
+        case analyzer.ImportType(expr) => expr match {
+          case s@Select(qual, name) => singleType(qual.tpe, s.symbol)
+          case i : Ident => i.tpe
+          case _ => tree.tpe
+        }
+        case _ => tree.tpe
+      }
+    
     case _ => tree.tpe
   }
 
@@ -380,11 +398,20 @@ self =>
   }
 
   def typeMembers(pos: Position): List[TypeMember] = {
-    val tree = typedTreeAt(pos)
+    val tree1 = typedTreeAt(pos)
+    val tree0 = tree1 match {
+      case tt : TypeTree => tt.original
+      case t => t 
+    }
+    val tree = tree0 match {
+      case s@Select(qual, name) if s.tpe == ErrorType => qual
+      case t => t
+    }
+    
     println("typeMembers at "+tree+" "+tree.tpe)
     val context = doLocateContext(pos)
     val superAccess = tree.isInstanceOf[Super]
-    val scope = newScope
+    val scope = new Scope
     val members = new LinkedHashMap[Symbol, TypeMember]
     def addTypeMember(sym: Symbol, pre: Type, inherited: Boolean, viaView: Symbol) {
       val symtpe = pre.memberType(sym)
@@ -407,12 +434,13 @@ self =>
       }
     }
     val pre = stabilizedType(tree)
-    for (sym <- tree.tpe.decls)
+    val ownerTpe = if (tree.tpe != null) tree.tpe else pre
+    for (sym <- ownerTpe.decls)
       addTypeMember(sym, pre, false, NoSymbol)
-    for (sym <- tree.tpe.members)
+    for (sym <- ownerTpe.members)
       addTypeMember(sym, pre, true, NoSymbol)
     val applicableViews: List[SearchResult] = 
-      new ImplicitSearch(tree, functionType(List(tree.tpe), AnyClass.tpe), true, context.makeImplicit(false))
+      new ImplicitSearch(tree, functionType(List(ownerTpe), AnyClass.tpe), true, context.makeImplicit(false))
         .allImplicits
     for (view <- applicableViews) {
       val vtree = viewApply(view)
@@ -434,24 +462,6 @@ self =>
       else t
     }
   }
-
-  /** A traverser that resets all type and symbol attributes in a tree
-  object ResetAttrs extends Transformer {
-    override def transform(t: Tree): Tree = {
-      if (t.hasSymbol) t.symbol = NoSymbol
-      t match {
-        case EmptyTree => 
-          t
-        case tt: TypeTree =>
-          if (tt.original != null) tt.original
-          else t
-        case _ => 
-          t.tpe = null
-          super.transform(t)
-      }
-    }
-  }
-  */
 
   /** The typer run */
   class TyperRun extends Run {
@@ -502,11 +512,8 @@ self =>
      */
     private def applyPhase(phase: Phase, unit: CompilationUnit) {
       val oldSource = reporter.getSource          
-      try {
-        reporter.setSource(unit.source)    
+      reporter.withSource(unit.source) {
         atPhase(phase) { phase.asInstanceOf[GlobalPhase] applyPhase unit }
-      } finally {
-        reporter setSource oldSource
       }
     }
   }

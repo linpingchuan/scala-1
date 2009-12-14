@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2005-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2005-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -38,9 +38,9 @@ case class ! [a](ch: Channel[a], msg: a)
  * @version 0.9.17
  * @author Philipp Haller
  */
-class Channel[Msg](val receiver: Reactor) extends InputChannel[Msg] with OutputChannel[Msg] {
+class Channel[Msg](val receiver: Actor) extends InputChannel[Msg] with OutputChannel[Msg] {
 
-  def this() = this(Actor.rawSelf)
+  def this() = this(Actor.self)
 
   /**
    * Sends a message to this <code>Channel</code>.

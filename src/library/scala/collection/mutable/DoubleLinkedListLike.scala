@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -21,7 +21,7 @@ package scala.collection.mutable
  *  @version 2.8
  *  @since   2.8
  */
-trait DoubleLinkedListLike[A, This >: Null <: DoubleLinkedListLike[A, This]] extends LinearSequenceLike[A, This] {
+trait DoubleLinkedListLike[A, This >: Null <: DoubleLinkedListLike[A, This]] extends LinearSeqLike[A, This] {
   self: This =>
 
   protected def clearElem() { _elem = null.asInstanceOf[A] }

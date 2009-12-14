@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -60,7 +60,7 @@ object BitSet extends BitSetFactory[BitSet] {
   /** The empty bitset */
   val empty: BitSet = new BitSet1(0L)
 
-  implicit def builderFactory: BuilderFactory[Int, BitSet, BitSet] = bitsetBuilderFactory
+  implicit def canBuildFrom: CanBuildFrom[BitSet, Int, BitSet] = bitsetCanBuildFrom
 
   /** A bitset containing all the bits in an array */
   def fromArray(elems: Array[Long]): BitSet = {

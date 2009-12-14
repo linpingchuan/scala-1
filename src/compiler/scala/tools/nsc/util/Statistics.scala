@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2009 LAMP/EPFL
+ * Copyright 2005-2010 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -45,7 +45,6 @@ abstract class Statistics {
       inform("#subtype     : " + subtypeCount)
       inform("ns subtype   : " + subtypeNanos)
       inform("#sametype    : " + sametypeCount)
-      inform("#unique types: " + uniques.size)
       inform("ms type-flow-analysis: " + analysis.timer.millis) 
       if (phase.name == "typer") {
         inform("time spent typechecking: "+showRelTyper(analyzer.typerTime))
@@ -57,7 +56,6 @@ abstract class Statistics {
         inform("    successful manifest: "+showRelTyper(analyzer.manifSucceed))
         inform("        failed manifest: "+showRelTyper(analyzer.manifFail))
         inform("implicit cache hitratio: "+"%2.1f".format(analyzer.hits.toDouble / (analyzer.hits + analyzer.misses) * 100))
-        inform("implicit cache coverage: "+"%2.1f".format((analyzer.hits + analyzer.misses).toDouble / (analyzer.uncached + analyzer.hits + analyzer.misses) * 100))
         inform("time spent in failed   : "+showRelTyper(analyzer.failedSilent))     
         inform("       failed op=      : "+showRelTyper(analyzer.failedOpEqs))     
         inform("       failed apply    : "+showRelTyper(analyzer.failedApplies))

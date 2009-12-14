@@ -1,5 +1,5 @@
 /* NSC -- new scala compiler
- * Copyright 2005-2009 LAMP/EPFL
+ * Copyright 2005-2010 LAMP/EPFL
  * @author  Iulian Dragos
  */
 
@@ -83,8 +83,8 @@ abstract class DeadCodeElimination extends SubComponent {
         mark
         sweep(m)
         accessedLocals = accessedLocals.removeDuplicates
-        if ((m.locals -- accessedLocals).length > 0) {
-          log("Removed dead locals: " + (m.locals -- accessedLocals))
+        if (m.locals diff accessedLocals nonEmpty) {
+          log("Removed dead locals: " + (m.locals diff accessedLocals))
           m.locals = accessedLocals.reverse
         }
       }
