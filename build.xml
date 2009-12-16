@@ -1224,6 +1224,7 @@ DOCUMENTATION
 
   <target name="docs.lib" depends="docs.pre-lib" unless="docs.lib.available">
     <stopwatch name="docs.lib.timer"/>
+<!-- disabling scaladoc because it keeps on dieing
     <mkdir dir="${build-docs.dir}/library"/>
     <scaladoc
       destdir="${build-docs.dir}/library"
@@ -1248,6 +1249,7 @@ DOCUMENTATION
       <exclude name="runtime/StreamCons.scala"/>
       <exclude name="runtime/StringAdd.scala"/>
     </scaladoc>
+-->
     <touch file="${build-docs.dir}/library.complete" verbose="no"/>
     <stopwatch name="docs.lib.timer" action="total"/>
   </target>
