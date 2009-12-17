@@ -28,6 +28,14 @@ abstract class TestSuite[CC[X] <: Seq[X] with GenericTraversableTemplate[X, CC] 
       case e: NoSuchElementException => //println("\t\t" + label + " threw a NoSuchElementException CORRECT")
     }
   }
+  def checkIOOB(label: String, op: => Any) {
+    try {
+      op
+      println("\t\t" + label + " should have thrown an IndexOutOfBoundsException INCORRECT")
+    } catch {
+      case e: IndexOutOfBoundsException => // success
+    }
+  }
   def testEmpty() {
     println("\tTesting empty: " + testName)
     val a = Factory.empty[Int]
@@ -166,15 +174,15 @@ abstract class TestSuite[CC[X] <: Seq[X] with GenericTraversableTemplate[X, CC] 
   def testApply() {
     println("\tTesting apply()")
     val empty = Factory.empty[Int]
-    checkNSE("empty(0)", empty(0))
+    checkIOOB("empty(0)", empty(0))
     val single = Factory(1)
     check("single(0)", single(0), 1)
-    checkNSE("single(1)", single(1))
+    checkIOOB("single(1)", single(1))
     val list = Factory(1, 2, 3, 4)
     check("list(0)", list(0), 1)
     check("list(2)", list(2), 3)
     check("list(2)", list(3), 4)
-    checkNSE("list(5)", list(5))
+    checkIOOB("list(5)", list(5))
   }
   def testUpdate() {
     println("\tTesting update: " + testName)
