@@ -1224,8 +1224,8 @@ DOCUMENTATION
 
   <target name="docs.lib" depends="docs.pre-lib" unless="docs.lib.available">
     <stopwatch name="docs.lib.timer"/>
-<!-- disabling scaladoc because it keeps on dieing
     <mkdir dir="${build-docs.dir}/library"/>
+<!-- disabling scaladoc because it keeps on dieing
     <scaladoc
       destdir="${build-docs.dir}/library"
       doctitle="Scala ${version.number} API"
