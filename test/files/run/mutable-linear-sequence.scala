@@ -1,11 +1,11 @@
 
 
-import scala.collection.LinearSequence
-import scala.collection.mutable.{ Sequence, LinearSequenceLike }
-import scala.collection.generic.{ SequenceFactory, GenericTraversableTemplate }
+import scala.collection.LinearSeq
+import scala.collection.mutable.{ Seq, LinearSeqLike }
+import scala.collection.generic.{ SeqFactory, GenericTraversableTemplate }
 
-abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X, CC] with LinearSequence[X] with LinearSequenceLike[X, CC[X]]] {
-  val Factory: SequenceFactory[CC]
+abstract class TestSuite[CC[X] <: Seq[X] with GenericTraversableTemplate[X, CC] with LinearSeq[X] with LinearSeqLike[X, CC[X]]] {
+  val Factory: SeqFactory[CC]
   val testName: String
   lazy val singular = Factory(1)
   lazy val double = Factory(1, 2)
@@ -215,7 +215,7 @@ abstract class TestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X,
 
 import scala.collection.mutable.{ LinkedListLike, LinkedList }
 
-abstract class LinkedListTestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X, CC] with LinearSequence[X] with LinkedListLike[X, CC[X]]] extends TestSuite[CC] {
+abstract class LinkedListTestSuite[CC[X] <: Seq[X] with GenericTraversableTemplate[X, CC] with LinearSeq[X] with LinkedListLike[X, CC[X]]] extends TestSuite[CC] {
   // no special tests yet
 }
 
@@ -225,7 +225,7 @@ object LinkedListTest extends LinkedListTestSuite[LinkedList] {
 }
 
 import scala.collection.mutable.DoubleLinkedListLike
-abstract class DoubleLinkedListTestSuite[CC[X] <: Sequence[X] with GenericTraversableTemplate[X, CC] with LinearSequence[X] with DoubleLinkedListLike[X, CC[X]]] 
+abstract class DoubleLinkedListTestSuite[CC[X] <: Seq[X] with GenericTraversableTemplate[X, CC] with LinearSeq[X] with DoubleLinkedListLike[X, CC[X]]] 
                extends TestSuite[CC] {
   def getLastNode[A](node: CC[A]): CC[A] = if (node.tail.isEmpty) node else getLastNode(node.tail)
   def getFirstNode[A](node: CC[A]): CC[A] = if (node.prev.isEmpty) node else getFirstNode(node.prev)
